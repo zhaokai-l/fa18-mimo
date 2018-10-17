@@ -1,4 +1,4 @@
-package cordic
+package mimo
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.devices.tilelink._
@@ -19,8 +19,8 @@ class ExampleTopModule[+L <: ExampleTop](l: L) extends RocketSubsystemModuleImp(
     with HasExtInterruptsModuleImp
     with DontTouch
 
-class ExampleTopWithCordic(implicit p: Parameters) extends ExampleTop
-    // mix in cordic
-    with HasPeripheryCordic {
+class ExampleTopWithFFT(implicit p: Parameters) extends ExampleTop
+    // mix in FFT
+    with HasPeripheryFFT {
   override lazy val module = new ExampleTopModule(this)
 }

@@ -1,9 +1,11 @@
-package cordic
+package mimo
 
 import chisel3._
 import chisel3.util._
 import dspblocks._
+import dsptools._
 import dsptools.numbers._
+import dspjunctions._
 import freechips.rocketchip.amba.axi4stream._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
@@ -92,7 +94,24 @@ abstract class ReadQueue
   lazy val module = new LazyModuleImp(this) {
     require(streamNode.in.length == 1)
 
-    // TODO
+    // get the input bundle associated with the AXI4Stream node
+    val in = streamNode.in(0)._1
+    // width (in bits) of the input interface
+    val width = in.params.n * 8
+    // instantiate a queue
+    val queue = Module(new Queue(UInt(in.params.dataBits.W), depth))
+    // connect streaming output to queue output
+    queue.io.enq.valid := in.valid
+    queue.io.enq.bits := in.bits.data
+    // don't use last. don't think we need it for slave
+    in.ready := queue.io.enq.ready
+
+    regmap(
+      // each read removes an entry from the queue
+      0x0 -> Seq(RegField.r(width, queue.io.deq)),
+      // read the number of entries in the queue
+      (width+7)/8 -> Seq(RegField.r(width, queue.io.count)),
+    )
   }
 }
 
@@ -122,80 +141,65 @@ class TLReadQueue
 
 }
 
-/**
-  * Make DspBlock wrapper for CORDIC
-  * @param cordicParams parameters for cordic
-  * @param ev$1
-  * @param ev$2
-  * @param ev$3
-  * @param p
-  * @tparam D
-  * @tparam U
-  * @tparam EO
-  * @tparam EI
-  * @tparam B
-  * @tparam T Type parameter for cordic, i.e. FixedPoint or DspReal
-  */
-abstract class CordicBlock[D, U, EO, EI, B <: Data, T <: Data]
-(
-  val cordicParams: CordicParams[T]
-)(implicit p: Parameters) extends DspBlock[D, U, EO, EI, B] {
+class TLFFTBlock[T <: Data : Real](val config: FFTConfig[T])(implicit p: Parameters) extends TLDspBlock with TLHasCSR {
   val streamNode = AXI4StreamIdentityNode()
-  val mem = None
+  def csrAddress = AddressSet(0x2200, 0x0ff)
+  def beatBytes = 8
+  def devname = "tlfft"
+  def devcompat = Seq("ucb-art", "fft")
+  val device = new SimpleDevice(devname, devcompat) {
+    override def describe(resources: ResourceBindings): Description = {
+      val Description(name, mapping) = super.describe(resources)
+      Description(name, mapping)
+    }
+  }
+  override val mem = Some(TLRegisterNode(address = Seq(csrAddress), device = device, beatBytes = beatBytes))
 
   lazy val module = new LazyModuleImp(this) {
-    require(streamNode.in.length == 1)
-    require(streamNode.out.length == 1)
+    val (in, inP) = streamNode.in.head
+    val (out, outP) = streamNode.out.head
 
-    val in = streamNode.in.head._1
-    val out = streamNode.out.head._1
+    val module = Module(new FFT[T](config))
 
-    val descriptorWidth: Int = CordicBundle(cordicParams).getWidth + 1 // + 1 because of vectoring
-    require(descriptorWidth <= in.params.n * 8, "Streaming interface too small")
+    val dataSetEndClear = RegInit(0.U(64.W))
+    module.io.data_set_end_clear := dataSetEndClear
 
-    // TODO
+    in.ready := true.B
+    module.io.in.valid := in.valid
+    if (config.quadrature) {
+      module.io.in.bits := in.bits.data.asTypeOf(module.io.in.bits)
+    } else {
+      val inAsReal = in.bits.data.asTypeOf(Vec(config.lanes, config.genIn.real))
+      module.io.in.bits.zip(inAsReal).foreach { case (mod, in) =>
+        mod.real := in
+        mod.imag := Real[T].zero
+      }
+    }
+    module.io.in.sync := in.bits.last
+
+    assert(out.ready)
+    out.valid := module.io.out.valid
+    out.bits.data := module.io.out.bits.asUInt
+    out.bits.last := module.io.out.sync
+
+    regmap(
+      0x0 -> Seq(RegField.r(8, module.io.data_set_end_status)),
+      0x8 -> Seq(RegField(8, dataSetEndClear)),
+    )
   }
 }
 
-/**
-  * TLDspBlock specialization of CordicBlock
-  * @param cordicParams parameters for cordic
-  * @param ev$1
-  * @param ev$2
-  * @param ev$3
-  * @param p
-  * @tparam T Type parameter for cordic data type
-  */
-class TLCordicBlock[T <: Data]
+class FFTThing[T <: Data : Real]
 (
-  cordicParams: CordicParams[T]
-)(implicit p: Parameters) extends
-  CordicBlock[TLClientPortParameters, TLManagerPortParameters, TLEdgeOut, TLEdgeIn, TLBundle, T](cordicParams)
-  with TLDspBlock
-
-/**
-  * TLChain is the "right way" to do this, but the dspblocks library seems to be broken.
-  * In the interim, this should work.
-  * @param cordicParams parameters for cordic
-  * @param depth depth of queues
-  * @param ev$1
-  * @param ev$2
-  * @param ev$3
-  * @param p
-  * @tparam T Type parameter for cordic, i.e. FixedPoint or DspReal
-  */
-class CordicThing[T <: Data]
-(
-  val cordicParams: CordicParams[T],
   val depth: Int = 8,
 )(implicit p: Parameters) extends LazyModule {
   // instantiate lazy modules
   val writeQueue = LazyModule(new TLWriteQueue(depth))
-  val cordic = LazyModule(new TLCordicBlock(cordicParams))
+  val fft = LazyModule(new TLFFTBlock)
   val readQueue = LazyModule(new TLReadQueue(depth))
 
   // connect streamNodes of queues and cordic
-  readQueue.streamNode := cordic.streamNode := writeQueue.streamNode
+  readQueue.streamNode := fft.streamNode := writeQueue.streamNode
 
   lazy val module = new LazyModuleImp(this)
 }
