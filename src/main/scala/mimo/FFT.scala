@@ -18,14 +18,6 @@ import dspblocks._
 import freechips.rocketchip.config.Parameters
 import scala.math._
 
-trait HasPeripheryFFT extends BaseSubsystem {
-  // instantiate FFT chain
-  val FFTChain = LazyModule(new FFTThing())
-  // connect memory interfaces to pbus
-  pbus.toVariableWidthSlave(Some("FFTWrite")) { FFTChain.writeQueue.mem.get }
-  pbus.toVariableWidthSlave(Some("FFTRead")) { FFTChain.readQueue.mem.get }
-}
-
 class DirectFFTIO[T<:Data:Real](genMid: DspComplex[T], genOut: DspComplex[T], lanes: Int)(implicit val p: Parameters) extends Bundle {
   val in = Input(ValidWithSync(Vec(lanes, genMid)))
   val out = Output(ValidWithSync(Vec(lanes, genOut)))

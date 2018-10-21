@@ -5,6 +5,14 @@ import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.util.DontTouch
 
+trait HasPeripheryFFT extends BaseSubsystem {
+  // instantiate FFT chain
+  val FFTChain = LazyModule(new FFTThing())
+  // connect memory interfaces to pbus
+  pbus.toVariableWidthSlave(Some("FFTWrite")) { FFTChain.writeQueue.mem.get }
+  pbus.toVariableWidthSlave(Some("FFTRead")) { FFTChain.readQueue.mem.get }
+}
+
 class ExampleTop(implicit p: Parameters) extends RocketSubsystem
     with CanHaveMasterAXI4MemPort
     with HasPeripheryBootROM
