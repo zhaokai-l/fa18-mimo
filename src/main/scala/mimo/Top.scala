@@ -1,5 +1,6 @@
 package mimo
 
+import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.subsystem._
