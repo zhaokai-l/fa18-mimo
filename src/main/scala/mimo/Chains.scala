@@ -1,8 +1,8 @@
 package mimo
 
 import chisel3._
-import chisel3.util._
 import chisel3.experimental._
+import chisel3.util._
 import dspblocks._
 import dsptools._
 import dsptools.numbers._
@@ -24,7 +24,7 @@ class FFTThing
         genOut = DspComplex(FixedPoint(18.W, 6.BP), FixedPoint(18.W, 6.BP)),
         n = 4,
         lanes = 2,
-        pipelineDepth = 2,
+        pipelineDepth = 1,
         quadrature = false,
 	)
   val fft = LazyModule(new FFTBlock(fftConfig))

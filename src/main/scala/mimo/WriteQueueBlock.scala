@@ -1,6 +1,7 @@
 package mimo
 
 import chisel3._
+import chisel3.experimental._
 import chisel3.util._
 import dspblocks._
 import dsptools._
@@ -32,22 +33,26 @@ abstract class WriteQueue
 
     // get the output bundle associated with the AXI4Stream node
     val out = streamNode.out(0)._1
+    val out_bits = out.bits.data.asTypeOf(Vec(2, DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP))))
     // width (in bits) of the output interface
     val width = out.params.n * 8
     // instantiate a queue
-    val queue = Module(new Queue(UInt(out.params.dataBits.W), depth))
+    val queue0 = Module(new Queue(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)), depth))
+    val queue1 = Module(new Queue(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)), depth))
     // connect queue output to streaming output
-    out.valid := queue.io.deq.valid
-    out.bits.data := queue.io.deq.bits
+    out.valid := (queue0.io.deq.valid && queue1.io.deq.valid)
+    out_bits(0) := queue0.io.deq.bits
+    out_bits(1) := queue1.io.deq.bits
     // don't use last
     out.bits.last := false.B
-    queue.io.deq.ready := out.ready
+    queue0.io.deq.ready := out.ready
+    queue1.io.deq.ready := out.ready
 
     regmap(
       // each write adds an entry to the queue
-      0x0 -> Seq(RegField.w(width, queue.io.enq)),
+      0x0 -> Seq(RegField.w(width, queue0.io.enq.asUInt())),
       // read the number of entries in the queue
-      (width+7)/8 -> Seq(RegField.r(width, queue.io.count)),
+      (width+7)/8 -> Seq(RegField.r(width, queue1.io.enq.asUInt())),
     )
   }
 }

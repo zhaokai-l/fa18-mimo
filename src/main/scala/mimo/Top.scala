@@ -10,8 +10,9 @@ trait HasPeripheryFFT extends BaseSubsystem {
   // instantiate FFT chain
   val FFTChain = LazyModule(new FFTThing())
   // connect memory interfaces to pbus
-  pbus.toVariableWidthSlave(Some("FFTWrite")) { FFTChain.writeQueue.mem.get }
-  pbus.toVariableWidthSlave(Some("FFTRead")) { FFTChain.readQueue.mem.get }
+  pbus.toVariableWidthSlave(Some("QueueWrite")) { FFTChain.writeQueue.mem.get }
+  pbus.toVariableWidthSlave(Some("FFTControl")) { FFTChain.fft.mem.get }
+  pbus.toVariableWidthSlave(Some("QueueRead")) { FFTChain.readQueue.mem.get }
 }
 
 class ExampleTop(implicit p: Parameters) extends RocketSubsystem
