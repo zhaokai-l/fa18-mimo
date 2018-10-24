@@ -92,7 +92,7 @@ class PE[T <: Data : Real](params: PEParams[T]) extends Module {
   val DONE = 2.U(2.W)
   val state = RegInit(INIT)
 
-  io.in.ready := state === INIT
+  io.in.ready := (state === INIT | state === WORK)
   io.out.valid := false.B
   io.finalOut.valid := state === DONE
 
@@ -107,7 +107,7 @@ class PE[T <: Data : Real](params: PEParams[T]) extends Module {
     io.out.valid := true.B
     iter := iter + 1.U
   }
-  when (state === WORK && io.in.fire()) {
+  when (state === WORK && io.in.fire())  {
     c := io.in.bits.a * io.in.bits.b + c
     io.out.valid := true.B
     iter := iter + 1.U
@@ -116,6 +116,7 @@ class PE[T <: Data : Real](params: PEParams[T]) extends Module {
     }
   }
   when (state === DONE && io.finalOut.fire()) {
+    iter := 0.U
     state := INIT
   }
 

@@ -30,6 +30,7 @@ class PETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABC], tolLSBs: Int = 2) 
     for (in <- (trial.ain zip trial.bin)) {
       poke(c.io.in.bits.a, in._1)
       poke(c.io.in.bits.b, in._2)
+      step(1)
 
       // wait until input is accepted
       var cyclesWaiting = 0
