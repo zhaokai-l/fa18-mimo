@@ -69,8 +69,6 @@ class PEIO[T <: Data](params: PEParams[T]) extends Bundle {
   val out = Decoupled(PEOutBundle(params))
   val finalOut = Decoupled(PEFinalOutBundle(params))
 
-  //val vectoring = Input(Bool())
-
   override def cloneType: this.type = PEIO(params).asInstanceOf[this.type]
 }
 object PEIO {
