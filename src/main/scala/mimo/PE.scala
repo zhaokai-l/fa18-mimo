@@ -111,7 +111,7 @@ class PE[T <: Data : Real](params: PEParams[T]) extends Module {
     c := io.in.bits.a * io.in.bits.b + c
     io.out.valid := true.B
     iter := iter + 1.U
-    when (iter >= params.nIters.U) {
+    when (iter >= (params.nIters-1).U) {
       state := DONE
     }
   }

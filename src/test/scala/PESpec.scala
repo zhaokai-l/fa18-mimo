@@ -2,6 +2,7 @@ package mimo
 
 import dsptools.numbers._
 import org.scalatest.{FlatSpec, Matchers}
+import scala.util.Random
 
 class PESpec extends FlatSpec with Matchers {
   behavior of "PE"
@@ -12,13 +13,19 @@ class PESpec extends FlatSpec with Matchers {
     val outA = DspReal()
     val outB = DspReal()
     val outC = DspReal()
-    val nIters = 8
+    val nIters = 3
   }
   it should "multiply" in {
-    val baseTrial = ABC(ain=Seq(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0), bin=Seq(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0), cout=Some(8.0))
-    //val b = Seq(-1, -0.5, 0, 0.25, 0.5, 1, 2, 3)
-    //val trials = b.map { bs => baseTrial.copy(bin = bs, cout = Some(b.fold(0)(_ + _))) }
-    RealPETester(realParams, Seq(baseTrial)) should be (true)
+    val numTrials = 10
+
+    val trials = Seq.fill(numTrials) {
+      val a = Seq.fill(realParams.nIters)(Random.nextDouble())
+      val b = Seq.fill(realParams.nIters)(Random.nextDouble())
+      val c = (a zip b).map { case (a: Double, b: Double) => a * b }.sum
+      ABC(ain=a, bin=b, cout=Some(c))
+    }
+
+    RealPETester(realParams, trials) should be (true)
   }
 
 }
