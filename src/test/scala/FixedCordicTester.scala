@@ -3,29 +3,29 @@ package cordic
 import dsptools.DspTester
 
 /**
- * Case class holding information needed to run an individual test
- */
+  * Case class holding information needed to run an individual test
+  */
 case class XYZ(
-  // input x, y and z
-  xin: Double,
-  yin: Double,
-  zin: Double,
-  // mode
-  vectoring: Boolean,
-  // optional outputs
-  // if None, then don't check the result
-  // if Some(...), check that the result matches
-  xout: Option[Double] = None,
-  yout: Option[Double] = None,
-  zout: Option[Double] = None
-)
+                // input x, y and z
+                xin: Double,
+                yin: Double,
+                zin: Double,
+                // mode
+                vectoring: Boolean,
+                // optional outputs
+                // if None, then don't check the result
+                // if Some(...), check that the result matches
+                xout: Option[Double] = None,
+                yout: Option[Double] = None,
+                zout: Option[Double] = None
+              )
 
 /**
- * DspTester for FixedIterativeCordic
- *
- * Run each trial in @trials
- */
-class CordicTester[T <: chisel3.Data](c: IterativeCordic[T], trials: Seq[XYZ], tolLSBs: Int = 2) extends DspTester(c) {
+  * DspTester for FixedIterativeCordic
+  *
+  * Run each trial in @trials
+  */
+class CordicTester[T <: chisel3.Data](c: IterativeCordic[T], trials: Seq[XYZ], tolLSBs: Int = 3) extends DspTester(c) {
   val maxCyclesWait = 50
 
   poke(c.io.out.ready, 1)
@@ -35,7 +35,7 @@ class CordicTester[T <: chisel3.Data](c: IterativeCordic[T], trials: Seq[XYZ], t
     poke(c.io.in.bits.x, trial.xin)
     poke(c.io.in.bits.y, trial.yin)
     poke(c.io.in.bits.z, trial.zin)
-    poke(c.io.vectoring, trial.vectoring)
+    poke(c.io.in.bits.vectoring, trial.vectoring)
 
     // wait until input is accepted
     var cyclesWaiting = 0
@@ -68,8 +68,8 @@ class CordicTester[T <: chisel3.Data](c: IterativeCordic[T], trials: Seq[XYZ], t
 }
 
 /**
- * Convenience function for running tests
- */
+  * Convenience function for running tests
+  */
 object FixedCordicTester {
   def apply(params: FixedCordicParams, trials: Seq[XYZ]): Boolean = {
     chisel3.iotesters.Driver.execute(Array("-tbn", "firrtl", "-fiwv"), () => new IterativeCordic(params)) {
