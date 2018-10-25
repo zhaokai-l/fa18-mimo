@@ -38,15 +38,16 @@ class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: I
   // output ready for each user
   c.io.out.foreach{ k => poke(k.ready, 1) }
 
-  // known pilots
-  c.io.pilots.bits.foreach( k => poke(k, frames.pilot))
+  var i = 0
 
   // Iterate through all frames
   for ((frame, k) <- frames.zipWithIndex) {
     // load known pilots and received spectrums
     // (one-by-one as DspTester doesn't support poking Seqs of Complex)
-    if (k < params.K) {
-      (c.io.pilots.bits(k) zip frame.pilot).foreach{ case(a,b) => poke(a,b) }
+    // need to keep track of when pilots are sent
+    i = k %( c.params.K+c.params.F)
+    if (i < c.params.K) {
+      (c.io.pilots.bits(i) zip frame.pilot).foreach{ case(a,b) => poke(a,b) }
     }
     (c.io.in.bits zip frame.spectrum).foreach{ case(a,b) => poke(a,b) }
 
@@ -61,19 +62,24 @@ class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: I
     }
     // wait until output is valid
     cyclesWaiting = 0
-    while (!peek(c.io.out(k).valid) && cyclesWaiting < maxCyclesWait) {
-      cyclesWaiting += 1
-      if (cyclesWaiting >= maxCyclesWait) {
-        expect(false, "waited for output too long")
+    // only wait for output valid in estimation phase
+    if (i < c.params.K) {
+      while (!peek(c.io.out(i).valid) && cyclesWaiting < maxCyclesWait) {
+        cyclesWaiting += 1
+        if (cyclesWaiting >= maxCyclesWait) {
+          expect(false, "waited for output too long")
+        }
+        step(1)
       }
-      step(1)
     }
+    // else skip and finish all payload words
+    else { step(1) }
     // set desired tolerance
     // in this case, it's pretty loose (2 bits)
     // can you get tolerance of 1 bit? 0? what makes the most sense?
     fixTolLSBs.withValue(tolLSBs) {
       // check every output where we have an expected value
-      // TODO: make this cleaner with a implicit check between Vec[DspComplex] & Seq[Complex]. Also support case where we want to see that the weights didn't change
+      // TODO: Support case where we want to see that the weights didn't change during payload
       frame.weights.foreach {
         w => (c.io.out(k).bits zip w).foreach { case(a,b) => expect(a,b) }
       }

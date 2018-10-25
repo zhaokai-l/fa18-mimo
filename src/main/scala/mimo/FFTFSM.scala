@@ -149,6 +149,7 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   // External weight overriding can only be done in the payload phase
   io.extWt.ready := state === sHold
   // Output valid
+  // TODO: Why does this complain?
   io.out.zipWithIndex.map{case(a,b) => a.valid := outValidReg(b)}
 
   // Load known pilots
@@ -164,7 +165,8 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
 
   // Calculate Hermitian conjugate
   when(state === sWork) {
-    wMem(kCnt) := h
+    // TODO: Need to fix scale to make this not complain
+    wMem(kCnt) := hH
     //(wMem(kCnt) zip hH).map{case(a,b) => a := b}
     state := sDone
   }
