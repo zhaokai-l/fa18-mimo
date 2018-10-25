@@ -82,7 +82,7 @@ class PETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABC], tolLSBs: Int = 3) 
   *
   * Run each trial in @trials
   */
-class ComplexPETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABCComplex], tolLSBs: Int = 2) extends DspTester(c) {
+class ComplexPETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABCComplex], tolLSBs: Int = 3) extends DspTester(c) {
   val maxCyclesWait = 50
 
   poke(c.io.finalOut.ready, 1)
@@ -101,8 +101,8 @@ class ComplexPETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABCComplex], tolL
         step(1)
       }
 
-//      c.io.in.bits.a.zipWithIndex.map{ case(ain,ind) => poke(ain, in._1(ind)) }
-//      c.io.in.bits.b.zipWithIndex.map{ case(bin,ind) => poke(bin, in._2(ind)) }
+      c.io.in.bits.a.zipWithIndex.map{ case(ain,ind) => poke(ain.asInstanceOf[DspComplex[FixedPoint]], in._1(ind)) }
+      c.io.in.bits.b.zipWithIndex.map{ case(bin,ind) => poke(bin.asInstanceOf[DspComplex[FixedPoint]], in._2(ind)) }
       step(1)
     }
     // wait until output is valid
@@ -120,7 +120,7 @@ class ComplexPETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABCComplex], tolL
     // can you get tolerance of 1 bit? 0? what makes the most sense?
     fixTolLSBs.withValue(tolLSBs) {
       // check every output where we have an expected value
-      //trial.cout.foreach { xMat => xMat.zipWithIndex.map{ case(xVec, indK) => xVec.zipWithIndex.map { case(x, indN) => expect(c.io.finalOut.bits.c(indK)(indN), x) } } }
+      trial.cout.foreach { xMat => xMat.zipWithIndex.map{ case(xVec, indK) => xVec.zipWithIndex.map { case(x, indN) => expect(c.io.finalOut.bits.c(indK)(indN).asInstanceOf[DspComplex[FixedPoint]], x) } } }
     }
   }
 }
