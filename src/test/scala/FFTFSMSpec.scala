@@ -26,14 +26,14 @@ object OFDMWords {
 }
 
 class FFTFSMSpec extends FlatSpec with Matchers {
-  behavior of "FixedFFTFSM"
+  behavior of "FFTFSM"
 
   val params = FixedFFTFSMParams(
     IOWidth = 16,
     //make sure these match the test files
     S = 256,
     K = 2,
-    M = 4,
+    M = 1,
     F = 33,
     O = 1
   )
@@ -42,7 +42,7 @@ class FFTFSMSpec extends FlatSpec with Matchers {
   val rsrc = "src/test/resources/"
   val txPilots = Array.ofDim[Array[Boolean]](params.K)
   for (k <- 0 until params.K) {
-    val word = OFDMWords(rsrc+"User_"+k+"_Pilot_Word.csv", params.S, 1).map(_.map(_ == "TRUE"))
+    val word = OFDMWords(rsrc+"User_"+k+"_Pilot_Word.csv", params.S, 1).map(_.map(_ == "1"))
     txPilots(k) = word(0)
   }
   val antFFTs = Array.ofDim[Array[Double]](params.M, params.K+params.F)
@@ -68,8 +68,8 @@ class FFTFSMSpec extends FlatSpec with Matchers {
   }
 
   // make a dummy pilot & FFT (all 1's for payload frames)
-  val dummyPilot = List.fill[Boolean](params.S)(true)
-  val dummyFFT = List.fill[Complex](params.S)(Complex(0,0))
+  val dummyPilot = Array.fill[Boolean](params.S)(true)
+  val dummyFFT = Array.fill[Complex](params.S)(Complex(0,0))
 
   // make basePSW frame
   val baseFrame = PSW(pilot = dummyPilot, spectrum = dummyFFT)
@@ -88,7 +88,7 @@ class FFTFSMSpec extends FlatSpec with Matchers {
   }
 
   it should "Fixed channel estimate" in {
-    FixedFFTFSMTester(params, frames) should be (true)
+    //FixedFFTFSMTester(params, frames) should be (true)
   }
 
   val realParams = new FFTFSMParams[DspReal] {
@@ -103,6 +103,6 @@ class FFTFSMSpec extends FlatSpec with Matchers {
   // can reuse all the stimulus from above
 
   it should "DspReal channel estimate" in {
-    //RealFFTFSMTester(realParams, frames) should be (true)
+    RealFFTFSMTester(realParams, frames) should be (true)
   }
 }

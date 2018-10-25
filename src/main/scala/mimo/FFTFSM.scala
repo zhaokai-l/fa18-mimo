@@ -83,9 +83,6 @@ class FFTFSMIO[T <: Data](params: FFTFSMParams[T]) extends Bundle {
   // Set weights externally
   val extWt = Flipped(Decoupled(new ExtWtBundle(params)))
 
-  // debug
-  val debug = Output(UInt(2.W))
-
   override def cloneType: this.type = FFTFSMIO(params).asInstanceOf[this.type]
 }
 object FFTFSMIO {
@@ -105,37 +102,32 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
 
   // SETUP - regs
 
-  // Register to store the known pilots
+  // known pilots
   val pReg = Reg(Vec(params.K, Vec(params.S, Bool())))
-
-  // Register to store the spectrum
+  // spectrum
   val sReg = Reg(Vec(params.S, params.proto.cloneType))
-
-  // Memory to store the weights
+  // weights
+  // TODO: make this into memory?
   val wMem = Reg(Vec(params.K, Vec(params.S, params.proto.cloneType)))
 
-  // Counter for which UE is sending pilot
+  // pilot counter
   val kCnt = RegInit(0.U(log2Ceil(params.K).W))
-  // Counter for the frame (to know when to readjust the weights)
+  // payload counter
   val fCnt = RegInit(0.U(log2Ceil(params.F).W))
 
-  // Register to hold input ready & output valids
+  // output valids
   val outValidReg = RegInit(Vec(Seq.fill(params.K)(false.B)))
 
 
   // COMBINATORIAL CALCULATION
 
-  // need to scale down by # of antennas so that matrix mult sum = 1
+  // scale down by # of antennas so that matrix mult sum = 1
   // TODO: this isn't type generic. Somehow can't get it to convert to params.proto.
-  val scale = DspComplex(ConvertableTo[T].fromDouble(1/params.M), ConvertableTo[T].fromDouble(0))
-  //val scale = params.proto(ConvertableTo[T].fromDouble(1/params.M), ConvertableTo[T].fromDouble(0))
-  // calculate the channel response by multiplying each subcarrier response by its pilot
-  // and taking its complex conjugate then scaling down
+  val scale = DspComplex(ConvertableTo[T].fromDouble(1.0/params.M), ConvertableTo[T].fromDouble(0))
+  //val scale = params.proto(Complex(1.0/params.M, 0))
+  // channel estimate = conjugate (subcarrier response * pilot) / scale
   val h = (sReg zip pReg(kCnt)).map{ case (a, b) => Mux(b, a, -a) }
   val hH = h.map{_.conj()*scale}
-  println(scale)
-  println(h)
-  println(hH)
 
   // STATE MACHINE
   val sInit = 0.U(2.W)
@@ -144,13 +136,9 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   val sHold = 3.U(2.W)
   val state = RegInit(sInit)
 
-  // DEBUG
-  io.debug := state
-
   // TODO: Is this correct?
-  // Input ready only when in init or payload
+  // Input & pilot ready only when in init or payload
   io.in.ready := state === sInit || state === sHold
-  // Pilot register same
   io.pilots.ready := state === sInit || state === sHold
   // External weight overriding can only be done in the payload phase
   io.extWt.ready := state === sHold
@@ -159,11 +147,9 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   io.out.zipWithIndex.map{case(a,b) => a.valid := outValidReg(b)}
 
   // Load known pilots
-  when(io.pilots.fire()) {
-    pReg := io.pilots.bits
-  }
+  when(io.pilots.fire()) { pReg := io.pilots.bits }
 
-  // When init load spectrum
+  // When sInit load spectrum
   when(io.in.fire()) {
     sReg := io.in.bits
     state := sWork
@@ -171,64 +157,47 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
 
   // Calculate Hermitian conjugate
   when(state === sWork) {
-    // TODO: Need to fix scale to make this not complain
+    // TODO: Need to fix scale to make this not complain?
     wMem(kCnt) := hH
-    //(wMem(kCnt) zip hH).map{case(a,b) => a := b}
     state := sDone
   }
 
   // Set weights for user kCnt
-  // TODO: Figure out how to bulk assign Vec of Decoupled
-  //(io.out zip wMem).foreach{case(a,b) => a.bits := b}
-  for(k <- 0 until params.K) {
-    io.out(k).bits := wMem(k)
-  }
+  (io.out zip wMem).foreach{case(a,b) => a.bits := b}
+
+  // this user's now valid, increment, move onto payload when finished
   when(state === sDone) {
-    // this user's weights are now valid
     outValidReg(kCnt) := true.B
-    // increment user
     kCnt := kCnt + 1.U
-    // when all users calculated, move onto payload
-    when(kCnt === (params.K-1).U) {
-      state := sHold
-    } .otherwise {
-      state := sInit
-    }
+    when(kCnt === (params.K-1).U) { state := sHold }
+    .otherwise { state := sInit }
   }
 
-  // Wait for payload frames to finish
+  // Wait for payload frames to finish. Each FFT valid is a new payload frame.
   when(state === sHold) {
-    // each FFT valid is a new payload frame
-    when(io.in.valid) {
-      fCnt := fCnt + 1.U
-    }
-    // replace with external weights during payload frames if commanded
-    // when payload frames are over, return back to sInit
+    when(io.in.valid) { fCnt := fCnt + 1.U }
     when(fCnt === (params.F-1).U) {
-      // reset all output weights
       outValidReg.foreach(_ := false.B)
       state := sInit
       kCnt := 0.U
       fCnt := 0.U
-    } .elsewhen(io.extWt.fire()) {
-        wMem(io.extWt.bits.kAddr)(io.extWt.bits.sAddr) := io.extWt.bits.wt
+    } .elsewhen(io.extWt.fire()) { // replace with external weights during payload frames if commanded
+      wMem(io.extWt.bits.kAddr)(io.extWt.bits.sAddr) := io.extWt.bits.wt
     } .otherwise {
       state := sHold
     }
   }
-
 }
 
 /**
   * Mixin for top-level rocket to add a PWM
   *
   */
-/*
+
 trait HasPeripheryFFTFSM extends BaseSubsystem {
   // instantiate FFTFSM chain
-  val FFTFSMChain = LazyModule(new FFTFSMThing(FixedFFTFSMParams(8, 10)))
+  val FFTFSMChain = LazyModule(new FFTFSMThing(FixedFFTFSMParams(IOWidth = 16, S = 256, K = 2, M = 4, F = 33, O = 1)))
   // connect memory interfaces to pbus
   pbus.toVariableWidthSlave(Some("FFTFSMWrite")) { FFTFSMChain.writeQueue.mem.get }
   pbus.toVariableWidthSlave(Some("FFTFSMRead")) { FFTFSMChain.readQueue.mem.get }
 }
-*/

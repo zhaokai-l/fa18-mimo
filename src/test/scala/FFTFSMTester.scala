@@ -48,7 +48,6 @@ class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: I
     // need to keep track of when pilots are sent
     i = k % (c.params.K+c.params.F)
     if (i < c.params.K) {
-      // TODO: why isn't this iterating through?
       (c.io.pilots.bits(i) zip frame.pilot).foreach{ case(a,b) => poke(a,b) }
     }
     (c.io.in.bits zip frame.spectrum).foreach{ case(a,b) => poke(a,b) }
@@ -60,7 +59,6 @@ class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: I
       if (cyclesWaiting >= maxCyclesWait) {
         expect(false, "waited for input too long")
       }
-      peek(c.io.debug)
       step(1)
     }
     // wait until output is valid
@@ -72,13 +70,11 @@ class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: I
         if (cyclesWaiting >= maxCyclesWait) {
           expect(false, "waited for output too long")
         }
-        peek(c.io.debug)
         step(1)
       }
     }
     // else skip and finish all payload words
     else {
-      peek(c.io.debug)
       step(1)
     }
     // set desired tolerance
