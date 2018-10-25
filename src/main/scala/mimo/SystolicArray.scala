@@ -100,35 +100,35 @@ class SystolicArray[T <: Data : Real](params: SystolicArrayParams[T]) extends Mo
   val DONE = 2.U(2.W)
   val state = RegInit(INIT)
 
-  io.in.ready := (state === INIT | state === WORK)
-  io.out.valid := false.B
-  io.finalOut.valid := state === DONE
-
-  // Iterations for working state
-  val iter = RegInit(0.U(log2Ceil(params.nIters+1).W))
-  val c = Reg(PEFinalOutBundle(params).c)
-
-
-  when (state === INIT && io.in.fire()) {
-    state := WORK
-    c := io.in.bits.a * io.in.bits.b
-    io.out.valid := true.B
-    iter := iter + 1.U
-  }
-  when (state === WORK && io.in.fire())  {
-    c := io.in.bits.a * io.in.bits.b + c
-    io.out.valid := true.B
-    iter := iter + 1.U
-    when (iter >= (params.nIters-1).U) {
-      state := DONE
-    }
-  }
-  when (state === DONE && io.finalOut.fire()) {
-    iter := 0.U
-    state := INIT
-  }
-
-  io.out.bits.a := io.in.bits.a
-  io.out.bits.b := io.in.bits.b
-  io.finalOut.bits.c := c
+//  io.in.ready := (state === INIT | state === WORK)
+//  io.out.valid := false.B
+//  io.finalOut.valid := state === DONE
+//
+//  // Iterations for working state
+//  val iter = RegInit(0.U(log2Ceil(params.nIters+1).W))
+//  val c = Reg(PEFinalOutBundle(params).c)
+//
+//
+//  when (state === INIT && io.in.fire()) {
+//    state := WORK
+//    c := io.in.bits.a * io.in.bits.b
+//    io.out.valid := true.B
+//    iter := iter + 1.U
+//  }
+//  when (state === WORK && io.in.fire())  {
+//    c := io.in.bits.a * io.in.bits.b + c
+//    io.out.valid := true.B
+//    iter := iter + 1.U
+//    when (iter >= (params.nIters-1).U) {
+//      state := DONE
+//    }
+//  }
+//  when (state === DONE && io.finalOut.fire()) {
+//    iter := 0.U
+//    state := INIT
+//  }
+//
+//  io.out.bits.a := io.in.bits.a
+//  io.out.bits.b := io.in.bits.b
+//  io.finalOut.bits.c := c
 }

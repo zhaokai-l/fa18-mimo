@@ -1,6 +1,7 @@
 package mimo
 
 import dsptools.DspTester
+import chisel3.experimental.FixedPoint
 
 /**
   * Case class holding information needed to run an individual test
@@ -66,13 +67,13 @@ class PETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABC], tolLSBs: Int = 2) 
 /**
   * Convenience function for running tests
   */
-//object FixedPETester {
-//  def apply(params: FixedCordicParams, trials: Seq[XYZ]): Boolean = {
-//    chisel3.iotesters.Driver.execute(Array("-tbn", "firrtl", "-fiwv"), () => new IterativeCordic(params)) {
-//      c => new CordicTester(c, trials)
-//    }
-//  }
-//}
+object FixedPETester {
+  def apply(params: PEParams[FixedPoint], trials: Seq[ABC]): Boolean = {
+    chisel3.iotesters.Driver.execute(Array("-tbn", "firrtl", "-fiwv"), () => new PE(params)) {
+      c => new PETester(c, trials)
+    }
+  }
+}
 
 object RealPETester {
   def apply(params: PEParams[dsptools.numbers.DspReal], trials: Seq[ABC]): Boolean = {
