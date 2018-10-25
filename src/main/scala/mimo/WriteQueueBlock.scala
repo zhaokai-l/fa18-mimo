@@ -25,49 +25,62 @@ abstract class WriteQueue
   val depth: Int = 8,
   val streamParameters: AXI4StreamMasterParameters = AXI4StreamMasterParameters()
 )(implicit p: Parameters) extends LazyModule with HasCSR {
-  // stream node, output only
+  // Stream node, output only
   val streamNode = AXI4StreamMasterNode(streamParameters)
-
   lazy val module = new LazyModuleImp(this) {
     require(streamNode.out.length == 1)
-
-    // get the output bundle associated with the AXI4Stream node
+    // Get the output bundle associated with the AXI4Stream node
     val out = streamNode.out(0)._1
-    val out_bits = out.bits.data.asTypeOf(Vec(2, DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP))))
-    // width (in bits) of the output interface
+    // Break out the lanes from the streamNode
+    val out_bits = out.bits.data.asTypeOf(Vec(4, DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP))))
+    // Width (in bits) of the output interface
     val width = out.params.n * 8
-    // instantiate a queue
+    // Instantiate queues
     val queue0 = Module(new Queue(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)), depth))
     val queue1 = Module(new Queue(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)), depth))
-    // connect queue output to streaming output
-    out.valid := (queue0.io.deq.valid && queue1.io.deq.valid)
-    val out_deq_bits = Wire(Vec(2, DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP))))
+    val queue2 = Module(new Queue(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)), depth))
+    val queue3 = Module(new Queue(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)), depth))
+    // Connect queue output to streaming output
+    out.valid := (queue0.io.deq.valid && queue1.io.deq.valid && queue2.io.deq.valid && queue3.io.deq.valid)
+    // Create a vec for the dequeue output bits, which will later be collapsed
+    val out_deq_bits = Wire(Vec(4, DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP))))
     out_deq_bits(0) := queue0.io.deq.bits
     out_deq_bits(1) := queue1.io.deq.bits
+    out_deq_bits(2) := queue0.io.deq.bits
+    out_deq_bits(3) := queue1.io.deq.bits
+    // Collapse the dequeue bits for the streamNode
     out.bits.data := out_deq_bits.asUInt()
     // don't use last
     out.bits.last := false.B
-
     // Queue ready to deq when out is ready and the other queue is not valid (i.e., transaction not occurring on other queue).
-    queue0.io.deq.ready := (out.ready && !(queue1.io.deq.valid))
-    queue1.io.deq.ready := (out.ready && !(queue0.io.deq.valid))
-
+    queue0.io.deq.ready := (out.ready && !(queue1.io.deq.valid || queue2.io.deq.valid || queue3.io.deq.valid))
+    queue1.io.deq.ready := (out.ready && !(queue0.io.deq.valid || queue2.io.deq.valid || queue3.io.deq.valid))
+    queue2.io.deq.ready := (out.ready && !(queue0.io.deq.valid || queue1.io.deq.valid || queue3.io.deq.valid))
+    queue3.io.deq.ready := (out.ready && !(queue0.io.deq.valid || queue1.io.deq.valid || queue2.io.deq.valid))
     // We need to make the enq a UInt to satisfy regmap, and Decoupled to break out ready, valid, bits.
     val enq0 = Wire(Decoupled(UInt(24.W)))
     queue0.io.enq.valid := enq0.valid
     queue0.io.enq.bits := enq0.bits.asTypeOf(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)))
     enq0.ready := queue0.io.enq.ready
-
     val enq1 = Wire(Decoupled(UInt(24.W)))
     queue1.io.enq.valid := enq1.valid
     queue1.io.enq.bits := enq1.bits.asTypeOf(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)))
     enq1.ready := queue1.io.enq.ready
+    val enq2 = Wire(Decoupled(UInt(24.W)))
+    queue2.io.enq.valid := enq2.valid
+    queue2.io.enq.bits := enq2.bits.asTypeOf(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)))
+    enq2.ready := queue2.io.enq.ready
+    val enq3 = Wire(Decoupled(UInt(24.W)))
+    queue3.io.enq.valid := enq3.valid
+    queue3.io.enq.bits := enq3.bits.asTypeOf(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)))
+    enq3.ready := queue3.io.enq.ready
 
+    // Give the registers addresses
     regmap(
-      // each write adds an entry to the queue
       0x0 -> Seq(RegField.w(width, enq0)),
-      // read the number of entries in the queue
-      (width+7)/8 -> Seq(RegField.w(width, enq1)),
+      1*((width+7)/8) -> Seq(RegField.w(width, enq1)),
+      2*((width+7)/8) -> Seq(RegField.w(width, enq2)),
+      3*((width+7)/8) -> Seq(RegField.w(width, enq3)),
     )
   }
 }

@@ -23,9 +23,9 @@ class FFTThing
         genIn = DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)),
         genOut = DspComplex(FixedPoint(18.W, 6.BP), FixedPoint(18.W, 6.BP)),
         n = 4,
-        lanes = 2,
-        pipelineDepth = 1,
-        quadrature = false,
+        lanes = 4,
+        pipelineDepth = 0,
+        quadrature = true,
 	)
   val fft = LazyModule(new FFTBlock(fftConfig))
   val readQueue = LazyModule(new TLReadQueue(depth))
