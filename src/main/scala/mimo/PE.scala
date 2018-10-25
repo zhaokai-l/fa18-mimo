@@ -20,18 +20,17 @@ trait PEParams[T <: Data] {
   val outA: T
   val outB: T
   val outC: T
-//  val N: Int
-//  val M: Int
-//  val K: Int
-  val nIters: Int
+  val K: Int
+  val M: Int
+  val N: Int
 }
 
 /**
   * Bundle type that describes the input of PE
   */
 class PEInBundle[T <: Data](params: PEParams[T]) extends Bundle {
-  val a = params.inA.cloneType
-  val b = params.inB.cloneType
+  val a = Vec(params.K, params.inA.cloneType)
+  val b = Vec(params.N, params.inB.cloneType)
 
   override def cloneType: this.type = PEInBundle(params).asInstanceOf[this.type]
 }
@@ -43,8 +42,8 @@ object PEInBundle {
   * Bundle type that describes the output of PE
   */
 class PEOutBundle[T <: Data](params: PEParams[T]) extends Bundle {
-  val a: T = params.outA.cloneType
-  val b: T = params.outB.cloneType
+  val a = Vec(params.K, params.outA.cloneType)
+  val b = Vec(params.N, params.outB.cloneType)
 
   override def cloneType: this.type = PEOutBundle(params).asInstanceOf[this.type]
 }
@@ -56,7 +55,7 @@ object PEOutBundle {
   * Bundle type that describes the output of PE
   */
 class PEFinalOutBundle[T <: Data](params: PEParams[T]) extends Bundle {
-  val c: T = params.outC.cloneType
+  val c = Vec(params.K, Vec(params.N, params.outC.cloneType))
 
   override def cloneType: this.type = PEFinalOutBundle(params).asInstanceOf[this.type]
 }
@@ -98,21 +97,26 @@ class PE[T <: Data : Ring](params: PEParams[T]) extends Module {
   io.finalOut.valid := state === DONE
 
   // Iterations for working state
-  val iter = RegInit(0.U(log2Ceil(params.nIters+1).W))
-  val c = Reg(PEFinalOutBundle(params).c)
+  val iter = RegInit(0.U(log2Ceil(params.M+1).W))
+  val c = Seq.fill(params.K)(Seq.fill(params.N)(Reg(params.outC.cloneType)))
 
 
   when (state === INIT && io.in.fire()) {
     state := WORK
-    c := io.in.bits.a * io.in.bits.b
+    c.zipWithIndex.map { case(cVec, indK) => cVec.zipWithIndex.map { case(cVal, indN) => cVal := io.in.bits.a(indK) * io.in.bits.b(indN) } }
+//    for (k <- 0 until params.K) {
+//      for (n <- 0 until params.N) {
+//        c()
+//      }
+//    }
     io.out.valid := true.B
     iter := iter + 1.U
   }
   when (state === WORK && io.in.fire())  {
-    c := io.in.bits.a * io.in.bits.b + c
+    c.zipWithIndex.map { case(cVec, indK) => cVec.zipWithIndex.map { case(cVal, indN) => cVal := io.in.bits.a(indK) * io.in.bits.b(indN) + cVal } }
     io.out.valid := true.B
     iter := iter + 1.U
-    when (iter >= (params.nIters-1).U) {
+    when (iter >= (params.M-1).U) {
       state := DONE
     }
   }
@@ -123,5 +127,6 @@ class PE[T <: Data : Ring](params: PEParams[T]) extends Module {
 
   io.out.bits.a := io.in.bits.a
   io.out.bits.b := io.in.bits.b
-  io.finalOut.bits.c := c
+  io.finalOut.bits.c.zipWithIndex.map { case(cVec, indK) => cVec.zipWithIndex.map { case(cVal, indN) => cVal := c(indK)(indN) } }
+  //io.finalOut.bits.c := c
 }

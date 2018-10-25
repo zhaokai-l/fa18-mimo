@@ -10,22 +10,22 @@ import breeze.math.Complex
   */
 case class ABC(
                 // input
-                ain: Seq[Double],
-                bin: Seq[Double],
+                ain: Seq[Seq[Double]],
+                bin: Seq[Seq[Double]],
                 // optional outputs
                 // if None, then don't check the result
                 // if Some(...), check that the result matches
-                cout: Option[Double] = None
+                cout: Option[Seq[Seq[Double]]] = None
               )
 
 case class ABCComplex(
                 // input
-                ain: Seq[Complex],
-                bin: Seq[Complex],
+                ain: Seq[Seq[Complex]],
+                bin: Seq[Seq[Complex]],
                 // optional outputs
                 // if None, then don't check the result
                 // if Some(...), check that the result matches
-                cout: Option[Complex] = None
+                cout: Option[Seq[Seq[Complex]]] = None
               )
 
 /**
@@ -33,7 +33,7 @@ case class ABCComplex(
   *
   * Run each trial in @trials
   */
-class PETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABC], tolLSBs: Int = 2) extends DspTester(c) {
+class PETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABC], tolLSBs: Int = 3) extends DspTester(c) {
   val maxCyclesWait = 50
 
   poke(c.io.finalOut.ready, 1)
@@ -52,8 +52,8 @@ class PETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABC], tolLSBs: Int = 2) 
         step(1)
       }
 
-      poke(c.io.in.bits.a, in._1)
-      poke(c.io.in.bits.b, in._2)
+      c.io.in.bits.a.zipWithIndex.map{ case(ain,ind) => poke(ain, in._1(ind)) }
+      c.io.in.bits.b.zipWithIndex.map{ case(bin,ind) => poke(bin, in._2(ind)) }
       step(1)
     }
     // wait until output is valid
@@ -71,7 +71,8 @@ class PETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABC], tolLSBs: Int = 2) 
     // can you get tolerance of 1 bit? 0? what makes the most sense?
     fixTolLSBs.withValue(tolLSBs) {
       // check every output where we have an expected value
-      trial.cout.foreach { x => expect(c.io.finalOut.bits.c, x) }
+      //trial.cout.foreach { x => expect(c.io.finalOut.bits.c, x) }
+      trial.cout.foreach { xMat => xMat.zipWithIndex.map{ case(xVec, indK) => xVec.zipWithIndex.map { case(x, indN) => expect(c.io.finalOut.bits.c(indK)(indN), x) } } }
     }
   }
 }
@@ -81,7 +82,7 @@ class PETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABC], tolLSBs: Int = 2) 
   *
   * Run each trial in @trials
   */
-class ComplexPETester[T <: chisel3.Data](c: PE[DspComplex[FixedPoint]], trials: Seq[ABCComplex], tolLSBs: Int = 2) extends DspTester(c) {
+class ComplexPETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABCComplex], tolLSBs: Int = 2) extends DspTester(c) {
   val maxCyclesWait = 50
 
   poke(c.io.finalOut.ready, 1)
@@ -100,8 +101,8 @@ class ComplexPETester[T <: chisel3.Data](c: PE[DspComplex[FixedPoint]], trials: 
         step(1)
       }
 
-      poke(c.io.in.bits.a, in._1)
-      poke(c.io.in.bits.b, in._2)
+//      c.io.in.bits.a.zipWithIndex.map{ case(ain,ind) => poke(ain, in._1(ind)) }
+//      c.io.in.bits.b.zipWithIndex.map{ case(bin,ind) => poke(bin, in._2(ind)) }
       step(1)
     }
     // wait until output is valid
@@ -119,7 +120,7 @@ class ComplexPETester[T <: chisel3.Data](c: PE[DspComplex[FixedPoint]], trials: 
     // can you get tolerance of 1 bit? 0? what makes the most sense?
     fixTolLSBs.withValue(tolLSBs) {
       // check every output where we have an expected value
-      trial.cout.foreach { x => expect(c.io.finalOut.bits.c, x) }
+      //trial.cout.foreach { xMat => xMat.zipWithIndex.map{ case(xVec, indK) => xVec.zipWithIndex.map { case(x, indN) => expect(c.io.finalOut.bits.c(indK)(indN), x) } } }
     }
   }
 }
