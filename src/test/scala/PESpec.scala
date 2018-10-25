@@ -71,17 +71,17 @@ class PESpec extends FlatSpec with Matchers {
     FixedPETester(fixedParams, trials) should be (true)
   }
 
-//  it should "fixed complex multiply" in {
-//    val numTrials = 10
-//
-//    val trials = Seq.fill(numTrials) {
-//      val a = Seq.fill(fixedParams.nIters)(Complex(Random.nextDouble(),Random.nextDouble()))
-//      val b = Seq.fill(fixedParams.nIters)(Complex(Random.nextDouble(),Random.nextDouble()))
-//      val c = (a zip b).map { case (a: Complex, b: Complex) => a * b }.sum
-//      ABC(ain=a, bin=b, cout=Some(c))
-//    }
-//
-//    FixedComplexPETester(fixedComplexParams, trials) should be (true)
-//  }
+  it should "fixed complex multiply" in {
+    val numTrials = 10
+
+    val trials = Seq.fill(numTrials) {
+      val a = Seq.fill(fixedParams.nIters)(Complex(Random.nextDouble(),Random.nextDouble()))
+      val b = Seq.fill(fixedParams.nIters)(Complex(Random.nextDouble(),Random.nextDouble()))
+      val c = (a zip b).map { case (a: Complex, b: Complex) => a * b }.sum
+      ABCComplex(ain=a, bin=b, cout=Some(c))
+    }
+
+    FixedComplexPETester(fixedComplexParams, trials) should be (true)
+  }
 
 }

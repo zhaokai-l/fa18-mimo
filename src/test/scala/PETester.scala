@@ -81,7 +81,7 @@ class PETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABC], tolLSBs: Int = 2) 
   *
   * Run each trial in @trials
   */
-class ComplexPETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABCComplex], tolLSBs: Int = 2) extends DspTester(c) {
+class ComplexPETester[T <: chisel3.Data](c: PE[DspComplex[FixedPoint]], trials: Seq[ABCComplex], tolLSBs: Int = 2) extends DspTester(c) {
   val maxCyclesWait = 50
 
   poke(c.io.finalOut.ready, 1)
@@ -100,8 +100,8 @@ class ComplexPETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABCComplex], tolL
         step(1)
       }
 
-//      poke(c.io.in.bits.a, in._1)
-//      poke(c.io.in.bits.b, in._2)
+      poke(c.io.in.bits.a, in._1)
+      poke(c.io.in.bits.b, in._2)
       step(1)
     }
     // wait until output is valid
@@ -119,7 +119,7 @@ class ComplexPETester[T <: chisel3.Data](c: PE[T], trials: Seq[ABCComplex], tolL
     // can you get tolerance of 1 bit? 0? what makes the most sense?
     fixTolLSBs.withValue(tolLSBs) {
       // check every output where we have an expected value
-//      trial.cout.foreach { x => expect(c.io.finalOut.bits.c, x) }
+      trial.cout.foreach { x => expect(c.io.finalOut.bits.c, x) }
     }
   }
 }

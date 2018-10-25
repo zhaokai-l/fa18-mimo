@@ -20,6 +20,9 @@ trait PEParams[T <: Data] {
   val outA: T
   val outB: T
   val outC: T
+//  val N: Int
+//  val M: Int
+//  val K: Int
   val nIters: Int
 }
 
@@ -27,8 +30,8 @@ trait PEParams[T <: Data] {
   * Bundle type that describes the input of PE
   */
 class PEInBundle[T <: Data](params: PEParams[T]) extends Bundle {
-  val a: T = params.inA.cloneType
-  val b: T = params.inB.cloneType
+  val a = params.inA.cloneType
+  val b = params.inB.cloneType
 
   override def cloneType: this.type = PEInBundle(params).asInstanceOf[this.type]
 }
