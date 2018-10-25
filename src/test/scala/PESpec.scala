@@ -10,6 +10,7 @@ import chisel3.util._
 import dsptools.numbers._
 import freechips.rocketchip.diplomacy.LazyModule
 import freechips.rocketchip.subsystem.BaseSubsystem
+import breeze.math.Complex
 
 import scala.util.Random
 
@@ -32,6 +33,15 @@ class PESpec extends FlatSpec with Matchers {
     val outA = FixedPoint(IOWidth.W,(IOWidth-2).BP)
     val outB = FixedPoint(IOWidth.W,(IOWidth-2).BP)
     val outC = FixedPoint(IOWidth.W,(IOWidth-2).BP)
+    val nIters = 3
+  }
+
+  val fixedComplexParams = new PEParams[DspComplex[FixedPoint]] {
+    val inA = DspComplex(FixedPoint(IOWidth.W,(IOWidth-2).BP))
+    val inB = DspComplex(FixedPoint(IOWidth.W,(IOWidth-2).BP))
+    val outA = DspComplex(FixedPoint(IOWidth.W,(IOWidth-2).BP))
+    val outB = DspComplex(FixedPoint(IOWidth.W,(IOWidth-2).BP))
+    val outC = DspComplex(FixedPoint(IOWidth.W,(IOWidth-2).BP))
     val nIters = 3
   }
 
@@ -60,5 +70,18 @@ class PESpec extends FlatSpec with Matchers {
 
     FixedPETester(fixedParams, trials) should be (true)
   }
+
+//  it should "fixed complex multiply" in {
+//    val numTrials = 10
+//
+//    val trials = Seq.fill(numTrials) {
+//      val a = Seq.fill(fixedParams.nIters)(Complex(Random.nextDouble(),Random.nextDouble()))
+//      val b = Seq.fill(fixedParams.nIters)(Complex(Random.nextDouble(),Random.nextDouble()))
+//      val c = (a zip b).map { case (a: Complex, b: Complex) => a * b }.sum
+//      ABC(ain=a, bin=b, cout=Some(c))
+//    }
+//
+//    FixedComplexPETester(fixedComplexParams, trials) should be (true)
+//  }
 
 }

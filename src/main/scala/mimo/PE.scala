@@ -81,7 +81,7 @@ object PEIO {
 /**
   * Base processing element (PE) for systolic array implementation of matrix multiplication
   */
-class PE[T <: Data : Real](params: PEParams[T]) extends Module {
+class PE[T <: Data : Ring](params: PEParams[T]) extends Module {
   val io = IO(PEIO(params))
 
   // FSM states
