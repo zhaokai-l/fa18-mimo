@@ -1,4 +1,4 @@
-package cordic
+package mimo
 
 import chisel3._
 import chisel3.util._
@@ -92,7 +92,23 @@ abstract class ReadQueue
   lazy val module = new LazyModuleImp(this) {
     require(streamNode.in.length == 1)
 
-    // TODO
+    // get the input bundle associated with the AXI4Stream node
+    val in = streamNode.in(0)._1
+    // width (in bits) of the output interface
+    val width = in.params.n * 8
+    // instantiate a queue
+    val queue = Module(new Queue(UInt(in.params.dataBits.W), depth))
+    // connect queue input to streaming input
+    queue.io.enq.valid := in.valid
+    queue.io.enq.bits := in.bits.data
+    in.ready := queue.io.enq.ready
+
+    regmap(
+      // each read removes an entry from the queue
+      0x0 -> Seq(RegField.r(width, queue.io.deq)),
+      // read the number of entries in the queue
+      (width+7)/8 -> Seq(RegField.r(width, queue.io.count)),
+    )
   }
 }
 
@@ -123,8 +139,8 @@ class TLReadQueue
 }
 
 /**
-  * Make DspBlock wrapper for CORDIC
-  * @param cordicParams parameters for cordic
+  * Make DspBlock wrapper for FFTFSM
+  * @param FFTFSMParams parameters for FFTFSM
   * @param ev$1
   * @param ev$2
   * @param ev$3
@@ -134,11 +150,11 @@ class TLReadQueue
   * @tparam EO
   * @tparam EI
   * @tparam B
-  * @tparam T Type parameter for cordic, i.e. FixedPoint or DspReal
+  * @tparam T Type parameter for FFTFSM, i.e. FixedPoint or DspReal
   */
-abstract class CordicBlock[D, U, EO, EI, B <: Data, T <: Data]
+abstract class FFTFSMBlock[D, U, EO, EI, B <: Data, T <: Data]
 (
-  val cordicParams: CordicParams[T]
+  val FFTFSMParams: FFTFSMParams[T]
 )(implicit p: Parameters) extends DspBlock[D, U, EO, EI, B] {
   val streamNode = AXI4StreamIdentityNode()
   val mem = None
@@ -150,52 +166,130 @@ abstract class CordicBlock[D, U, EO, EI, B <: Data, T <: Data]
     val in = streamNode.in.head._1
     val out = streamNode.out.head._1
 
-    val descriptorWidth: Int = CordicBundle(cordicParams).getWidth + 1 // + 1 because of vectoring
-    require(descriptorWidth <= in.params.n * 8, "Streaming interface too small")
+    //val descriptorWidth: Int = FFTFSMBundle(FFTFSMParams).getWidth + 1 // + 1 because of vectoring
+    //require(descriptorWidth <= in.params.n * 8, "Streaming interface too small")
 
     // TODO
   }
 }
 
 /**
-  * TLDspBlock specialization of CordicBlock
-  * @param cordicParams parameters for cordic
+  * TLDspBlock specialization of FFTFSMBlock
+  * @param FFTFSMParams parameters for FFTFSM
   * @param ev$1
   * @param ev$2
   * @param ev$3
   * @param p
-  * @tparam T Type parameter for cordic data type
+  * @tparam T Type parameter for FFTFSM data type
   */
-class TLCordicBlock[T <: Data]
+class TLFFTFSMBlock[T <: Data]
 (
-  cordicParams: CordicParams[T]
+  FFTFSMParams: FFTFSMParams[T]
 )(implicit p: Parameters) extends
-  CordicBlock[TLClientPortParameters, TLManagerPortParameters, TLEdgeOut, TLEdgeIn, TLBundle, T](cordicParams)
+  FFTFSMBlock[TLClientPortParameters, TLManagerPortParameters, TLEdgeOut, TLEdgeIn, TLBundle, T](FFTFSMParams)
   with TLDspBlock
 
 /**
   * TLChain is the "right way" to do this, but the dspblocks library seems to be broken.
   * In the interim, this should work.
-  * @param cordicParams parameters for cordic
+  * @param FFTFSMParams parameters for FFTFSM
   * @param depth depth of queues
   * @param ev$1
   * @param ev$2
   * @param ev$3
   * @param p
-  * @tparam T Type parameter for cordic, i.e. FixedPoint or DspReal
+  * @tparam T Type parameter for FFTFSM, i.e. FixedPoint or DspReal
   */
-class CordicThing[T <: Data]
+class FFTFSMThing[T <: Data]
 (
-  val cordicParams: CordicParams[T],
+  val FFTFSMParams: FFTFSMParams[T],
   val depth: Int = 8,
 )(implicit p: Parameters) extends LazyModule {
   // instantiate lazy modules
   val writeQueue = LazyModule(new TLWriteQueue(depth))
-  val cordic = LazyModule(new TLCordicBlock(cordicParams))
+  val FFTFSM = LazyModule(new TLFFTFSMBlock(FFTFSMParams))
   val readQueue = LazyModule(new TLReadQueue(depth))
 
-  // connect streamNodes of queues and cordic
-  readQueue.streamNode := cordic.streamNode := writeQueue.streamNode
+  // connect streamNodes of queues and FFTFSM
+  readQueue.streamNode := FFTFSM.streamNode := writeQueue.streamNode
+
+  lazy val module = new LazyModuleImp(this)
+}
+
+/**
+  * Make DspBlock wrapper for GolayFSM
+  * @param GolayFSMParams parameters for GolayFSM
+  * @param ev$1
+  * @param ev$2
+  * @param ev$3
+  * @param p
+  * @tparam D
+  * @tparam U
+  * @tparam EO
+  * @tparam EI
+  * @tparam B
+  * @tparam T Type parameter for GolayFSM, i.e. FixedPoint or DspReal
+  */
+abstract class GolayFSMBlock[D, U, EO, EI, B <: Data, T <: Data]
+(
+  val GolayFSMParams: GolayFSMParams[T]
+)(implicit p: Parameters) extends DspBlock[D, U, EO, EI, B] {
+  val streamNode = AXI4StreamIdentityNode()
+  val mem = None
+
+  lazy val module = new LazyModuleImp(this) {
+    require(streamNode.in.length == 1)
+    require(streamNode.out.length == 1)
+
+    val in = streamNode.in.head._1
+    val out = streamNode.out.head._1
+
+    //val descriptorWidth: Int = GolayFSMBundle(GolayFSMParams).getWidth + 1 // + 1 because of vectoring
+    //require(descriptorWidth <= in.params.n * 8, "Streaming interface too small")
+
+    // TODO
+  }
+}
+
+/**
+  * TLDspBlock specialization of GolayFSMBlock
+  * @param GolayFSMParams parameters for GolayFSM
+  * @param ev$1
+  * @param ev$2
+  * @param ev$3
+  * @param p
+  * @tparam T Type parameter for GolayFSM data type
+  */
+class TLGolayFSMBlock[T <: Data]
+(
+  GolayFSMParams: GolayFSMParams[T]
+)(implicit p: Parameters) extends
+  GolayFSMBlock[TLClientPortParameters, TLManagerPortParameters, TLEdgeOut, TLEdgeIn, TLBundle, T](GolayFSMParams)
+  with TLDspBlock
+
+/**
+  * TLChain is the "right way" to do this, but the dspblocks library seems to be broken.
+  * In the interim, this should work.
+  * @param GolayFSMParams parameters for GolayFSM
+  * @param depth depth of queues
+  * @param ev$1
+  * @param ev$2
+  * @param ev$3
+  * @param p
+  * @tparam T Type parameter for GolayFSM, i.e. FixedPoint or DspReal
+  */
+class GolayFSMThing[T <: Data]
+(
+  val GolayFSMParams: GolayFSMParams[T],
+  val depth: Int = 8,
+)(implicit p: Parameters) extends LazyModule {
+  // instantiate lazy modules
+  val writeQueue = LazyModule(new TLWriteQueue(depth))
+  val GolayFSM = LazyModule(new TLGolayFSMBlock(GolayFSMParams))
+  val readQueue = LazyModule(new TLReadQueue(depth))
+
+  // connect streamNodes of queues and GolayFSM
+  readQueue.streamNode := GolayFSM.streamNode := writeQueue.streamNode
 
   lazy val module = new LazyModuleImp(this)
 }

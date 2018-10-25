@@ -1,6 +1,6 @@
 // See LICENSE.SiFive for license details.
 
-package cordic
+package mimo
 
 import chisel3._
 import freechips.rocketchip.config.Parameters
@@ -13,7 +13,7 @@ class TestHarness()(implicit p: Parameters) extends Module {
     val success = Output(Bool())
   })
 
-  val dut = Module(LazyModule(new ExampleTopWithCordic).module)
+  val dut = Module(LazyModule(new ExampleTopWithFFTFSM).module)
   dut.reset := reset.toBool() | dut.debug.ndreset
 
   dut.dontTouchPorts()
