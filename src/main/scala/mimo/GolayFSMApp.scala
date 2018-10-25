@@ -60,11 +60,11 @@ object GolayFSMApp extends App {
   }
   val defaultParams = FixedGolayFSMParams(
     IOWidth = 16,
-    N = 16,
+    N = 64,
     C = 1,
-    K = 1,
-    M = 16,
-    F = 256,
+    K = 2,
+    M = 4,
+    F = 33,
     O = 1,
   )
   val (chiselArgs, params) = argParse(args.toList, defaultParams)

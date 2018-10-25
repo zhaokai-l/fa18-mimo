@@ -51,23 +51,22 @@ case class FixedFFTFSMParams(
   F: Int,
   O: Int,
 ) extends FFTFSMParams[FixedPoint] {
-  // 1 sign & 1 integer bit since range is -1 to +1
-  val proto = DspComplex(FixedPoint(IOWidth.W, (IOWidth-2).BP), FixedPoint(IOWidth.W, (IOWidth-2).BP))
+  // number of integer bits depends on log2(number of users) + 1 sign bit
+  val proto = DspComplex(FixedPoint(IOWidth.W, (IOWidth-log2Ceil(K)-1).BP), FixedPoint(IOWidth.W, (IOWidth-log2Ceil(K)-1).BP))
 }
 
 /**
   * To override weight from AXI4. Valid pulse implies weight needs to be overridden.
   */
-class ExtWtBundle[T <: Data](params: FFTFSMParams[T]) extends Bundle {
+class FFTExtWtBundle[T <: Data](params: FFTFSMParams[T]) extends Bundle {
   val kAddr = UInt(log2Ceil(params.K).W)
   val sAddr = UInt(log2Ceil(params.S).W)
   val wt = params.proto.cloneType
 
-  override def cloneType: this.type = ExtWtBundle(params).asInstanceOf[this.type]
-
+  override def cloneType: this.type = FFTExtWtBundle(params).asInstanceOf[this.type]
 }
-object ExtWtBundle {
-  def apply[T <: Data](params: FFTFSMParams[T]): ExtWtBundle[T] = new ExtWtBundle(params)
+object FFTExtWtBundle {
+  def apply[T <: Data](params: FFTFSMParams[T]): FFTExtWtBundle[T] = new FFTExtWtBundle(params)
 }
 
 /**
@@ -81,7 +80,7 @@ class FFTFSMIO[T <: Data](params: FFTFSMParams[T]) extends Bundle {
   // Known pilots
   val pilots = Flipped(Decoupled(Vec(params.K, Vec(params.S, Bool()))))
   // Set weights externally
-  val extWt = Flipped(Decoupled(new ExtWtBundle(params)))
+  val extWt = Flipped(Decoupled(new FFTExtWtBundle(params)))
 
   override def cloneType: this.type = FFTFSMIO(params).asInstanceOf[this.type]
 }
@@ -121,9 +120,9 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
 
   // COMBINATORIAL CALCULATION
 
-  // scale down by # of antennas so that matrix mult sum = 1
+  // scale down by # of antennas & oversampling ratio so that matrix mult sum = 1
   // TODO: this isn't type generic. Somehow can't get it to convert to params.proto.
-  val scale = DspComplex(ConvertableTo[T].fromDouble(1.0/params.M), ConvertableTo[T].fromDouble(0))
+  val scale = DspComplex(ConvertableTo[T].fromDouble(1.0/(params.M*params.O)), ConvertableTo[T].fromDouble(0))
   //val scale = params.proto(Complex(1.0/params.M, 0))
   // channel estimate = conjugate (subcarrier response * pilot) / scale
   val h = (sReg zip pReg(kCnt)).map{ case (a, b) => Mux(b, a, -a) }
@@ -165,7 +164,7 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   // Set weights for user kCnt
   (io.out zip wMem).foreach{case(a,b) => a.bits := b}
 
-  // this user's now valid, increment, move onto payload when finished
+  // this user now valid, increment, move onto payload when finished
   when(state === sDone) {
     outValidReg(kCnt) := true.B
     kCnt := kCnt + 1.U

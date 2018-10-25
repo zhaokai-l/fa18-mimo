@@ -58,9 +58,9 @@ object FFTFSMApp extends App {
   val defaultParams = FixedFFTFSMParams(
     IOWidth = 16,
     S = 256,
-    K = 1,
-    M = 16,
-    F = 256,
+    K = 2,
+    M = 4,
+    F = 33,
     O = 1,
   )
   val (chiselArgs, params) = argParse(args.toList, defaultParams)

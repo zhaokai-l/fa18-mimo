@@ -215,3 +215,81 @@ class FFTFSMThing[T <: Data]
 
   lazy val module = new LazyModuleImp(this)
 }
+
+/**
+  * Make DspBlock wrapper for GolayFSM
+  * @param GolayFSMParams parameters for GolayFSM
+  * @param ev$1
+  * @param ev$2
+  * @param ev$3
+  * @param p
+  * @tparam D
+  * @tparam U
+  * @tparam EO
+  * @tparam EI
+  * @tparam B
+  * @tparam T Type parameter for GolayFSM, i.e. FixedPoint or DspReal
+  */
+abstract class GolayFSMBlock[D, U, EO, EI, B <: Data, T <: Data]
+(
+  val GolayFSMParams: GolayFSMParams[T]
+)(implicit p: Parameters) extends DspBlock[D, U, EO, EI, B] {
+  val streamNode = AXI4StreamIdentityNode()
+  val mem = None
+
+  lazy val module = new LazyModuleImp(this) {
+    require(streamNode.in.length == 1)
+    require(streamNode.out.length == 1)
+
+    val in = streamNode.in.head._1
+    val out = streamNode.out.head._1
+
+    //val descriptorWidth: Int = GolayFSMBundle(GolayFSMParams).getWidth + 1 // + 1 because of vectoring
+    //require(descriptorWidth <= in.params.n * 8, "Streaming interface too small")
+
+    // TODO
+  }
+}
+
+/**
+  * TLDspBlock specialization of GolayFSMBlock
+  * @param GolayFSMParams parameters for GolayFSM
+  * @param ev$1
+  * @param ev$2
+  * @param ev$3
+  * @param p
+  * @tparam T Type parameter for GolayFSM data type
+  */
+class TLGolayFSMBlock[T <: Data]
+(
+  GolayFSMParams: GolayFSMParams[T]
+)(implicit p: Parameters) extends
+  GolayFSMBlock[TLClientPortParameters, TLManagerPortParameters, TLEdgeOut, TLEdgeIn, TLBundle, T](GolayFSMParams)
+  with TLDspBlock
+
+/**
+  * TLChain is the "right way" to do this, but the dspblocks library seems to be broken.
+  * In the interim, this should work.
+  * @param GolayFSMParams parameters for GolayFSM
+  * @param depth depth of queues
+  * @param ev$1
+  * @param ev$2
+  * @param ev$3
+  * @param p
+  * @tparam T Type parameter for GolayFSM, i.e. FixedPoint or DspReal
+  */
+class GolayFSMThing[T <: Data]
+(
+  val GolayFSMParams: GolayFSMParams[T],
+  val depth: Int = 8,
+)(implicit p: Parameters) extends LazyModule {
+  // instantiate lazy modules
+  val writeQueue = LazyModule(new TLWriteQueue(depth))
+  val GolayFSM = LazyModule(new TLGolayFSMBlock(GolayFSMParams))
+  val readQueue = LazyModule(new TLReadQueue(depth))
+
+  // connect streamNodes of queues and GolayFSM
+  readQueue.streamNode := GolayFSM.streamNode := writeQueue.streamNode
+
+  lazy val module = new LazyModuleImp(this)
+}

@@ -24,3 +24,9 @@ class ExampleTopWithFFTFSM(implicit p: Parameters) extends ExampleTop
     with HasPeripheryFFTFSM {
   override lazy val module = new ExampleTopModule(this)
 }
+
+class ExampleTopWithGolayFSM(implicit p: Parameters) extends ExampleTop
+    // mix in GolayFSM
+    with HasPeripheryGolayFSM {
+  override lazy val module = new ExampleTopModule(this)
+}

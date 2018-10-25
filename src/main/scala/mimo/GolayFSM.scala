@@ -45,7 +45,7 @@ trait GolayFSMParams[T <: Data] {
   * GolayFSM parameters object for fixed-point GolayFSMs
   */
 case class FixedGolayFSMParams(
-  // width of input spectrum & output weights
+  // width of input spectrum & output weights, DspReal()
   IOWidth: Int,
   N: Int,
   C: Int,
@@ -59,6 +59,20 @@ case class FixedGolayFSMParams(
 }
 
 /**
+  * To override weight from AXI4. Valid pulse implies weight needs to be overridden.
+  */
+class GolayExtWtBundle[T <: Data](params: GolayFSMParams[T]) extends Bundle {
+  val kAddr = UInt(log2Ceil(params.K).W)
+  val cAddr = UInt(log2Ceil(params.C).W)
+  val wt = params.proto.cloneType
+
+  override def cloneType: this.type = GolayExtWtBundle(params).asInstanceOf[this.type]
+}
+object GolayExtWtBundle {
+  def apply[T <: Data](params: GolayFSMParams[T]): GolayExtWtBundle[T] = new GolayExtWtBundle(params)
+}
+
+/**
   * Bundle type as IO for GolayFSM modules
   */
 class GolayFSMIO[T <: Data](params: GolayFSMParams[T]) extends Bundle {
@@ -67,10 +81,8 @@ class GolayFSMIO[T <: Data](params: GolayFSMParams[T]) extends Bundle {
   // Matrix weights
   val out = Vec(params.K, Decoupled(params.proto.cloneType))
 
-  // Inputs to set weights externally
-  val ext = Input(Bool())
-  val kAddr = Input(log2Ceil(params.K).U) // Which UE
-  val extWt = Flipped(Decoupled(params.proto.cloneType)) // The weight
+  // Set weights externally
+  val extWt = Flipped(Decoupled(new GolayExtWtBundle(params)))
 
   override def cloneType: this.type = GolayFSMIO(params).asInstanceOf[this.type]
 }
@@ -92,16 +104,28 @@ class GolayFSM[T <: Data : Real](val params: GolayFSMParams[T]) extends Module {
 
   // SETUP - regs
 
-  // Register to store the correlation
-  val sReg = Reg(Vec(params.C, params.proto.cloneType))
-
-  // Memory to store the weights
+  // correlation
+  val cReg = Reg(Vec(params.C, params.proto.cloneType))
+  // weights
   val wMem = Reg(Vec(params.K, params.proto.cloneType))
 
-  // Counter for which UE is sending pilot
+  // pilot counter
   val kCnt = RegInit(0.U(log2Ceil(params.K).W))
-  // Counter for the frame (to know when to readjust the weights)
+  // payload counter
   val fCnt = RegInit(0.U(log2Ceil(params.F).W))
+
+  // output valids
+  val outValidReg = RegInit(Vec(Seq.fill(params.K)(false.B)))
+
+
+  // COMBINATORIAL CALCULATION
+
+  // scale down by # of antennas & oversampling ratio so that matrix mult sum = 1
+  val scale = DspComplex(ConvertableTo[T].fromDouble(1.0/(params.M*params.O)), ConvertableTo[T].fromDouble(0))
+  // TODO: ALL TIMING CORRECTION. This assumes only 1 correlation pt and it is the peak.
+  // channel estimate = conjugate(correlation) / scale
+  val hH = cReg(0).conj()*scale
+
 
   // STATE MACHINE
   val sInit = 0.U(2.W)
@@ -112,10 +136,14 @@ class GolayFSM[T <: Data : Real](val params: GolayFSMParams[T]) extends Module {
 
   // Input ready only when in init
   io.in.ready := state === sInit
+  // External weight overriding can only be done in the payload phase
+  io.extWt.ready := state === sHold
+  // Output valid
+  io.out.zipWithIndex.map{case(a,b) => a.valid := outValidReg(b)}
 
-  // When init load spectrum
+  // When sInit load spectrum
   when(io.in.fire()) {
-    sReg := io.in.bits
+    cReg := io.in.bits
     state := sWork
   }
 
@@ -126,68 +154,41 @@ class GolayFSM[T <: Data : Real](val params: GolayFSMParams[T]) extends Module {
   }
 
   // Set weights for user kCnt
-  // TODO: Figure out how to bulk assign Vec of Decoupled
-  //(io.out zip wMem).foreach{case(a,b) => a.bits := b}
-  for(k <- 0 until params.K) {
-    io.out(k).bits := wMem(k)
-  }
-  when(state === sDone && io.out(kCnt).fire()) {
-    // next user's weights are now valid
-    io.out(kCnt).valid := true.B
-    // increment user
+  (io.out zip wMem).foreach{case(a,b) => a.bits := b}
+  
+  // this user now valid, increment, move onto payload when finished
+  when(state === sDone) {
+    outValidReg(kCnt) := true.B
     kCnt := kCnt + 1.U
-    // when all users calculated, move onto payload
-    when(kCnt === params.K.U) {
-      state := sHold
-    } .otherwise {
-      state := sInit
-    }
+    when(kCnt === (params.K-1).U) { state := sHold }
+    .otherwise { state := sInit }
   }
 
-  // Wait for payload frames to finish
+  // Wait for payload frames to finish. Each correlation is a new payload frame.
   when(state === sHold) {
-    // each FFT valid is a new payload frame
-    when(io.in.valid) {
-      fCnt := fCnt + 1.U
-    }
-    // replace with external weights during payload frames if commanded
-    // when payload frames are over, return back to sInit
-    when(fCnt === params.F.U) {
-      // reset all output weights
-      for(k <- 0 until params.K) {
-        io.out(k).valid := false.B
-      }
+    when(io.in.valid) { fCnt := fCnt + 1.U }
+    when(fCnt === (params.F-1).U) {
+      outValidReg.foreach(_ := false.B)
       state := sInit
       kCnt := 0.U
       fCnt := 0.U
-    } .elsewhen(io.ext && io.extWt.fire()) {
-      wMem(io.kAddr) := io.extWt.bits
+    } .elsewhen(io.extWt.fire()) {
+      wMem(io.extWt.bits.kAddr) := io.extWt.bits.wt
+    } .otherwise {
+      state := sHold
     }
   }
-
-  // COMBINATORIAL CALCULATION
-
-  // need to scale down by # of antennas so that matrix mult sum = 1
-  // TODO: this isn't type generic. Somehow can't get it to convert to params.proto.
-  val scale = DspComplex(ConvertableTo[T].fromDouble(1/(params.M*params.N*params.O)), ConvertableTo[T].fromDouble(0))
-  // this doesn't work
-  // val scale = params.proto(Complex(1/params.M, 0))
-
-  // calculate the complex conjugate and then scale down
-  val hH = VecInit(sReg.map{_.conj() * scale})
-
 }
 
 /**
   * Mixin for top-level rocket to add a PWM
   *
   */
-/*
+
 trait HasPeripheryGolayFSM extends BaseSubsystem {
   // instantiate GolayFSM chain
-  val GolayFSMChain = LazyModule(new GolayFSMThing(FixedGolayFSMParams(8, 10)))
+  val GolayFSMChain = LazyModule(new GolayFSMThing(FixedGolayFSMParams(IOWidth = 16, N = 32, C = 1, K = 2, M = 4, F = 33, O = 1)))
   // connect memory interfaces to pbus
   pbus.toVariableWidthSlave(Some("GolayFSMWrite")) { GolayFSMChain.writeQueue.mem.get }
   pbus.toVariableWidthSlave(Some("GolayFSMRead")) { GolayFSMChain.readQueue.mem.get }
 }
-*/
