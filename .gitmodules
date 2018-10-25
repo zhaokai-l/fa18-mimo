@@ -1,0 +1,4 @@
+[submodule "python/hydraspine_TheSDK"]
+	path = python/hydraspine_TheSDK
+	url = git@bwrcrepo.eecs.berkeley.edu:hydra-spine-integration/hydraspine_TheSDK.git
+	branch = hydra_290C
