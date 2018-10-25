@@ -83,6 +83,9 @@ class FFTFSMIO[T <: Data](params: FFTFSMParams[T]) extends Bundle {
   // Set weights externally
   val extWt = Flipped(Decoupled(new ExtWtBundle(params)))
 
+  // debug
+  val debug = Output(UInt(2.W))
+
   override def cloneType: this.type = FFTFSMIO(params).asInstanceOf[this.type]
 }
 object FFTFSMIO {
@@ -116,7 +119,7 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   // Counter for the frame (to know when to readjust the weights)
   val fCnt = RegInit(0.U(log2Ceil(params.F).W))
 
-  // Register to hold output valids
+  // Register to hold input ready & output valids
   val outValidReg = RegInit(Vec(Seq.fill(params.K)(false.B)))
 
 
@@ -126,12 +129,13 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   // TODO: this isn't type generic. Somehow can't get it to convert to params.proto.
   val scale = DspComplex(ConvertableTo[T].fromDouble(1/params.M), ConvertableTo[T].fromDouble(0))
   //val scale = params.proto(ConvertableTo[T].fromDouble(1/params.M), ConvertableTo[T].fromDouble(0))
-  println(scale)
   // calculate the channel response by multiplying each subcarrier response by its pilot
   // and taking its complex conjugate then scaling down
   val h = (sReg zip pReg(kCnt)).map{ case (a, b) => Mux(b, a, -a) }
   val hH = h.map{_.conj()*scale}
-
+  println(scale)
+  println(h)
+  println(hH)
 
   // STATE MACHINE
   val sInit = 0.U(2.W)
@@ -140,11 +144,13 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   val sHold = 3.U(2.W)
   val state = RegInit(sInit)
 
-  // Input ready only when in init
-  io.in.ready := state === sInit
-  // Pilot register can be updated only when in init or payload phases
+  // DEBUG
+  io.debug := state
+
   // TODO: Is this correct?
-  // Otherwise risk doing the wrong conjugation calculation
+  // Input ready only when in init or payload
+  io.in.ready := state === sInit || state === sHold
+  // Pilot register same
   io.pilots.ready := state === sInit || state === sHold
   // External weight overriding can only be done in the payload phase
   io.extWt.ready := state === sHold
@@ -177,13 +183,13 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   for(k <- 0 until params.K) {
     io.out(k).bits := wMem(k)
   }
-  when(state === sDone && io.out(kCnt).fire()) {
-    // next user's weights are now valid
+  when(state === sDone) {
+    // this user's weights are now valid
     outValidReg(kCnt) := true.B
     // increment user
     kCnt := kCnt + 1.U
     // when all users calculated, move onto payload
-    when(kCnt === params.K.U) {
+    when(kCnt === (params.K-1).U) {
       state := sHold
     } .otherwise {
       state := sInit
@@ -198,7 +204,7 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
     }
     // replace with external weights during payload frames if commanded
     // when payload frames are over, return back to sInit
-    when(fCnt === params.F.U) {
+    when(fCnt === (params.F-1).U) {
       // reset all output weights
       outValidReg.foreach(_ := false.B)
       state := sInit
@@ -206,6 +212,8 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
       fCnt := 0.U
     } .elsewhen(io.extWt.fire()) {
         wMem(io.extWt.bits.kAddr)(io.extWt.bits.sAddr) := io.extWt.bits.wt
+    } .otherwise {
+      state := sHold
     }
   }
 

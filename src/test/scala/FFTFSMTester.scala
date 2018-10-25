@@ -25,7 +25,8 @@ case class PSW(
 class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: Int = 2) extends DspTester(c) {
   val maxCyclesWait = 50
 
-  // Set the input valid (all subcarriers
+  // Set the input valid
+  // TODO: is this streaming essentially?
   poke(c.io.in.valid, 1)
   poke(c.io.pilots.valid, 1)
 
@@ -45,8 +46,9 @@ class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: I
     // load known pilots and received spectrums
     // (one-by-one as DspTester doesn't support poking Seqs of Complex)
     // need to keep track of when pilots are sent
-    i = k %( c.params.K+c.params.F)
+    i = k % (c.params.K+c.params.F)
     if (i < c.params.K) {
+      // TODO: why isn't this iterating through?
       (c.io.pilots.bits(i) zip frame.pilot).foreach{ case(a,b) => poke(a,b) }
     }
     (c.io.in.bits zip frame.spectrum).foreach{ case(a,b) => poke(a,b) }
@@ -58,6 +60,7 @@ class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: I
       if (cyclesWaiting >= maxCyclesWait) {
         expect(false, "waited for input too long")
       }
+      peek(c.io.debug)
       step(1)
     }
     // wait until output is valid
@@ -69,11 +72,15 @@ class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: I
         if (cyclesWaiting >= maxCyclesWait) {
           expect(false, "waited for output too long")
         }
+        peek(c.io.debug)
         step(1)
       }
     }
     // else skip and finish all payload words
-    else { step(1) }
+    else {
+      peek(c.io.debug)
+      step(1)
+    }
     // set desired tolerance
     // in this case, it's pretty loose (2 bits)
     // can you get tolerance of 1 bit? 0? what makes the most sense?
@@ -81,7 +88,7 @@ class FFTFSMTester[T <: chisel3.Data](c: FFTFSM[T], frames: Seq[PSW], tolLSBs: I
       // check every output where we have an expected value
       // TODO: Support case where we want to see that the weights didn't change during payload
       frame.weights.foreach {
-        w => (c.io.out(k).bits zip w).foreach { case(a,b) => expect(a,b) }
+        w => (c.io.out(i).bits zip w).foreach { case(a,b) => expect(a,b) }
       }
     }
   }

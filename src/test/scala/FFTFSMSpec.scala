@@ -83,7 +83,7 @@ class FFTFSMSpec extends FlatSpec with Matchers {
     }
     //followed by payload PSW objects
     for (f <- 0 until params.F) {
-      frames(m*(params.K+params.F)+f) = baseFrame.copy(spectrum = antPayloads(m)(f))
+      frames(m*(params.K+params.F)+params.K+f) = baseFrame.copy(spectrum = antPayloads(m)(f))
     }
   }
 
