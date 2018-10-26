@@ -10,7 +10,7 @@ The following items are in tape-in 0:
 - Attaching FFT and FFTBlock wrapper to a ReadQueue and WriteQueue that have been adapted for multiple FFT lanes.
 - ReadQueue and WriteQueue contain a queue for each lane of the FFT.
 - Modules are connected Diplomatically with StreamNodes.
-![alt text](https://github.com/ucberkeley-ee290c/fa18-mimo/tree/master/doc/tapein0_james.png "FFT tapein 0 diagram")
+![alt text](https://github.com/ucberkeley-ee290c/fa18-mimo/blob/master/doc/tapein0_james.png "FFT tapein 0 diagram")
 
 ### Victor
 -
