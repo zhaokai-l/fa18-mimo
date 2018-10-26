@@ -3,7 +3,9 @@
 The following items are in tape-in 0:
 
 ### Harrison
--
+- Created two FSMs, one for channel estimation using FFTs (BPSK OFDM pilots) and the other using Golay codewords.
+- Unit tests are complete for FixedPoint versions of both, DspReal works for Golay.
+- Unit test stimuli are located in /src/test/resources
 
 ### James
 - Integration of [FFT](https://github.com/ucb-art/fft/tree/diplomacyPort2) block with lab2 (cordic) template repo.
