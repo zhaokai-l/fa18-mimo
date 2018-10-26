@@ -35,7 +35,7 @@ The following items are in tape-in 0:
         - Gain power for different users
     - downsample: downsample signals based on the RX oversampled ratio
     - sig_fft: FFT for all symbol and the size is the number of subcarriers (CP needs to be abandoned)
-    - FreqChannelEst: Estimating channel for each subcarriers using OFDM pilots from different users
+    - FreqChannelEst: Estimating channel for each subcarriers at each antenna using OFDM pilots from different users
         - The gain found by antenna m and user k can set the H[m,k] coefficient for different subcarriers
     - FreqBF: Matric multiplication between filtered signals with the Hermit conjegate estimated channel matrix in frequency domain for different subcarriers
     - ZFMatrix: matrix inverting
