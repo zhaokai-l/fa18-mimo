@@ -42,8 +42,7 @@ class FFTFSMSpec extends FlatSpec with Matchers {
   val rsrc = "src/test/resources/"
   val txPilots = Array.ofDim[Array[Boolean]](params.K)
   for (k <- 0 until params.K) {
-    val word = OFDMWords(rsrc+"User_"+k+"_Pilot_Word.csv", params.S, 1).map(_.map(_ == "1"))
-    txPilots(k) = word(0)
+    txPilots(k) = OFDMWords(rsrc+"User_"+k+"_Pilot_Word.csv", params.S, 1).map(_.map(_ == "1")).head
   }
   val antFFTs = Array.ofDim[Array[Double]](params.M, params.K+params.F)
   for (m <- 0 until params.M) {
@@ -57,13 +56,13 @@ class FFTFSMSpec extends FlatSpec with Matchers {
   for (m <- 0 until params.M) {
     // pilots & golden weights
     for (k <- 0 until params.K) {
-      antPilots(m)(k) = (antFFTs(m)(k).slice(0, params.S) zip antFFTs(m)(k).slice(params.S, 2*params.S)).map{case (r,i) => Complex(r,i)}
+      antPilots(m)(k) = antFFTs(m)(k).splitAt(params.S).zipped.map{case(r,i) => Complex(r,i)}
       h(m)(k) = (txPilots(k) zip antPilots(m)(k)).map{case (a,b) => if(a) {b} else {-b}}
       hH(m)(k) = h(m)(k).map{_.conjugate/(params.M*params.O)}
     }
     // payloads
     for (f <- params.K until params.F+params.K) {
-      antPayloads(m)(f-params.K) = (antFFTs(m)(f).slice(0, params.S) zip antFFTs(m)(f).slice(params.S, 2 * params.S)).map{case (r,i) => Complex(r,i)}
+      antPayloads(m)(f-params.K) = antFFTs(m)(f).splitAt(params.S).zipped.map{case (r,i) => Complex(r,i)}
     }
   }
 

@@ -6,9 +6,11 @@ import breeze.math.Complex
 /**
  * Case class holding information needed to run an individual test
  */
-case class CW(
+case class CPW(
   // Received correlation
-  correlation: Seq[Complex],
+  correlation: Complex,
+  // Peak valid
+  peakValid: Boolean,
   // optional outputs
   // if None, then don't check the result
   // if Some(...), check that the result matches
@@ -20,7 +22,7 @@ case class CW(
  *
  * Run each trial in @trials
  */
-class GolayFSMTester[T <: chisel3.Data](c: GolayFSM[T], frames: Seq[CW], tolLSBs: Int = 2) extends DspTester(c) {
+class GolayFSMTester[T <: chisel3.Data](c: GolayFSM[T], samples: Seq[CPW], tolLSBs: Int = 2) extends DspTester(c) {
   val maxCyclesWait = 50
 
   // Set the input valid
@@ -38,13 +40,11 @@ class GolayFSMTester[T <: chisel3.Data](c: GolayFSM[T], frames: Seq[CW], tolLSBs
 
   var i = 0
 
-  // Iterate through all frames
-  for ((frame, k) <- frames.zipWithIndex) {
+  // Iterate through all samples
+  for ((samp, i) <- samples.zipWithIndex) {
     // load correlations
-    // (one-by-one as DspTester doesn't support poking Seqs of Complex)
-    // need to keep track of when pilots are sent
-    i = k % (c.params.K+c.params.F)
-    (c.io.in.bits zip frame.correlation).foreach{ case(a,b) => poke(a,b) }
+    poke(c.io.in.valid, samp.peakValid)
+    poke(c.io.in.bits, samp.correlation)
 
     // wait until input is accepted
     var cyclesWaiting = 0
@@ -88,17 +88,17 @@ class GolayFSMTester[T <: chisel3.Data](c: GolayFSM[T], frames: Seq[CW], tolLSBs
  * Convenience function for running tests
  */
 object FixedGolayFSMTester {
-  def apply(params: FixedGolayFSMParams, frames: Seq[CW]): Boolean = {
+  def apply(params: FixedGolayFSMParams, samples: Seq[CPW]): Boolean = {
     chisel3.iotesters.Driver.execute(Array("-tbn", "firrtl", "-fiwv"), () => new GolayFSM(params)) {
-      c => new GolayFSMTester(c, frames)
+      c => new GolayFSMTester(c, samples)
     }
   }
 }
 
 object RealGolayFSMTester {
-  def apply(params: GolayFSMParams[dsptools.numbers.DspReal], frames: Seq[CW]): Boolean = {
+  def apply(params: GolayFSMParams[dsptools.numbers.DspReal], samples: Seq[CPW]): Boolean = {
     chisel3.iotesters.Driver.execute(Array("-tbn", "verilator", "-fiwv"), () => new GolayFSM(params)) {
-      c => new GolayFSMTester(c, frames)
+      c => new GolayFSMTester(c, samples)
     }
   }
 }

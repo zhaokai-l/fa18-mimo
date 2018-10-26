@@ -6,23 +6,14 @@ import breeze.math.Complex
 
 
 /**
-  * Objects that parses the test correlation words from Python simulation (CSV format).
-  * The correlation is formatted this way:
-  * [word 0 real],[word 0 imaginary]
-  * [word 1 real],[word 1 imaginary]
-  * ... and so on.
+  * Objects that parses the test correlation samples from Python simulation (CSV format).
+  * The correlation is formatted as a column vector way:
+  * [sample 0 real]
+  * [sample 1 real]
+  * ...
+  * [sample n-1 imaginary]
+  * [sample n imaginary]
   */
-
-object CorrWords {
-  def apply[T <: String](filename: String, samples: Int, frames: Int): Array[Array[String]] = {
-    val data = Array.ofDim[String](frames, samples)
-    val bufferedSource = io.Source.fromFile(filename)
-    bufferedSource.getLines.zipWithIndex.foreach {
-      case(line,count) => data(count) = line.split(",").map(_.trim)
-    }
-    data
-  }
-}
 
 class GolayFSMSpec extends FlatSpec with Matchers {
   behavior of "GolayFSM"
@@ -30,58 +21,45 @@ class GolayFSMSpec extends FlatSpec with Matchers {
   val params = FixedGolayFSMParams(
     IOWidth = 16,
     //make sure these match the test files
-    N = 64,
+    N = 80,
     C = 1,
     K = 2,
     M = 4,
-    F = 33,
     O = 1
   )
 
-  // load test pilots & Corr spectrums
+  // load correlated pilots and where the valid is asserted (peak) from test files
   val rsrc = "src/test/resources/"
-  val antCorrs = Array.ofDim[Array[Double]](params.M, params.K+params.F)
-  for (n <- 0 until params.N) {
-    antCorrs(n) = OFDMWords(rsrc+"Antenna_"+n+"_Corr_Result.csv", params.N*2, params.K+params.F).map(_.map(_.toDouble))
-  }
-
-  // extract Corrs of each antenna's pilots and payloads only as Array[Complex].
-  // also calculate golden weights (Hermitian of channel response).
-  val antPilots, h, hH = Array.ofDim[Array[Complex]](params.M, params.K)
-  val antPayloads = Array.ofDim[Array[Complex]](params.M, params.F)
+  val antCorrsRaw = Array.ofDim[List[Double]](params.M)
+  val peakValids = Array.ofDim[List[Boolean]](params.K)
   for (m <- 0 until params.M) {
-    // pilots & golden weights
-    for (k <- 0 until params.K) {
-      antPilots(m)(k) = (antCorrs(m)(k).slice(0, params.N) zip antCorrs(m)(k).slice(params.N, 2*params.N)).map{case (r,i) => Complex(r,i)}
-      hH(m)(k) = antPilots(m)(k).map{_.conjugate/(params.M*params.O)}
-    }
-    // payloads
-    for (f <- params.K until params.F+params.K) {
-      antPayloads(m)(f-params.K) = (antCorrs(m)(f).slice(0, params.N) zip antCorrs(m)(f).slice(params.N, 2 * params.N)).map{case (r,i) => Complex(r,i)}
-    }
+    antCorrsRaw(m) = io.Source.fromFile(rsrc+"Antenna_"+m+"_Golay_Result.csv").getLines.toList.map{_.toDouble}
+    peakValids(m) = io.Source.fromFile(rsrc+"Antenna_"+m+"_Peak_Valid.csv").getLines.toList.map{_ == "TRUE"}
   }
 
-  // make a dummy correlation (all 1's for payload frames)
-  val dummyCorr = Array.fill[Complex](params.N)(Complex(0,0))
+  // repackage into array of complex numbers & calculate golden channel estimation
+  val nSamps = peakValids(0).length/2
+  val antCorrs, hH = Array.ofDim[List[Complex]](params.M)
+  for (m <- 0 until params.M) {
+    antCorrs(m) = antCorrsRaw(m).splitAt(nSamps).zipped.map{case(a,b) => Complex(a,b)}
+    hH(m) = (peakValids(m) zip antCorrs(m)).collect{case(a,b) if a => b.conjugate}
+  }
 
-  // make baseCW frame
-  val baseFrame = CW(correlation = dummyCorr)
-  val frames = Array.ofDim[CW]((params.K+params.F)*params.M)
+  // make baseCPW sample
+  val baseSample = CPW(correlation = Complex(0,0), peakValid = false)
+  val samples = Array.ofDim[CPW](params.M*nSamps)
 
   // append all antennas together
   for (m <- 0 until params.M) {
-    //append pilot CW objects for all users
-    for (k <- 0 until params.K) {
-      frames(m*(params.K+params.F)+k) = baseFrame.copy(correlation = antPilots(m)(k), weight = Some(hH(m)(k)))
-    }
-    //followed by payload CW objects
-    for (f <- 0 until params.F) {
-      frames(m*(params.K+params.F)+params.K+f) = baseFrame.copy(correlation = antPayloads(m)(f))
+    var k = 0 //which user's golden pilot
+    for(s <- 0 until nSamps) {
+      val goldenWeight = if(peakValids(m)(s)) Some(hH(m)(k+=1))  else None
+      samples(params.M*nSamps+s) = baseSample.copy(correlation = antCorrs(m)(s), peakValid = peakValids(m)(s), weight = goldenWeight)
     }
   }
 
   it should "Fixed channel estimate" in {
-    FixedGolayFSMTester(params, frames) should be (true)
+    FixedGolayFSMTester(params, samples) should be (true)
   }
 
   val realParams = new GolayFSMParams[DspReal] {
@@ -90,13 +68,12 @@ class GolayFSMSpec extends FlatSpec with Matchers {
     val C = params.C
     val K = params.K
     val M = params.M
-    val F = params.F
     val O = params.O
   }
 
   // can reuse all the stimulus from above
   // TODO: Real test does not work
   it should "DspReal channel estimate" in {
-    //RealGolayFSMTester(realParams, frames) should be (true)
+    //RealGolayFSMTester(realParams, samples) should be (true)
   }
 }

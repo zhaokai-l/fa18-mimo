@@ -11,12 +11,10 @@ import freechips.rocketchip.subsystem.BaseSubsystem
 import breeze.math.Complex
 
 /**
-  * In the pilot phase, the GolayFSM takes a peak from the Golay correlator (eventually this will be 5 samples around the peak).
-  * There are K users in the system, and they will send staggered Golay code pilots of length N.
-  * Therefore, each FSM is a single dimensional system. and there are M FSMs (M antennas).
-  * The FSM uses finds the Hermitian conjugate of the correlation peak.
-  * This is the weights for the M x K matrix multiplier.
-  * Finally, in the payload phase, the M x K weights times the M received time domain signals gives the symbols for each of the K users.  * The FSM can replace any weight in the system from an external memory mapped interface during the payload phase.
+  * The GolayFSM is much simpler than the FFTFSM.
+  * It takes a streaming correlation. The correlator asserts valid when a peak is found.
+  * Each peak corresponds to a user's pilot -> channel estimation for each user.
+  * The FSM can replace any weight in the system from an external memory mapped interface during the payload phase.
   */
 
 /**
@@ -27,7 +25,7 @@ import breeze.math.Complex
 trait GolayFSMParams[T <: Data] {
   // DspComplex
   val proto: DspComplex[T]
-  // Length of Golay codeword
+  // Length of Golay codeword + guard interval
   val N: Int
   // Number of correlation samples around peak
   val C: Int
@@ -35,8 +33,6 @@ trait GolayFSMParams[T <: Data] {
   val K: Int
   // Number of antennas
   val M: Int
-  // Number of payload frames
-  val F: Int
   // Oversampling ratio
   val O: Int
 }
@@ -51,7 +47,6 @@ case class FixedGolayFSMParams(
   C: Int,
   K: Int,
   M: Int,
-  F: Int,
   O: Int,
 ) extends GolayFSMParams[FixedPoint] {
   // 1 sign & 1 integer bit since range is -1 to +1

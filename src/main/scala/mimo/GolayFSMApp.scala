@@ -60,7 +60,7 @@ object GolayFSMApp extends App {
   }
   val defaultParams = FixedGolayFSMParams(
     IOWidth = 16,
-    N = 64,
+    N = 32,
     C = 1,
     K = 2,
     M = 4,
