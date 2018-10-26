@@ -1,0 +1,3 @@
+./src/main/scala/mimo/Cordic.scala
+./src/test/scala/FixedCordicSpec.scala
+./src/test/scala/FixedCordicTester.scala
