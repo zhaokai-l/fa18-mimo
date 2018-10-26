@@ -21,7 +21,7 @@ The following items are in tape-in 0:
 - Python system model for each blocks are created and tested using the SDK 
 - The system contains:
     - packet_gen: transmit signals for each user
-        ![trans sig](https://github.com/ucberkeley-ee290c/fa18-mimo/tree/master/doc/tx_sig.png)
+        ![trans sig](https://github.com/ucberkeley-ee290c/fa18-mimo/blob/master/doc/tx_sig.png)
         - Pilot and payload generator
         - Root-Raised Cosine filter
     - channel_gen: generated the channel for simulation
