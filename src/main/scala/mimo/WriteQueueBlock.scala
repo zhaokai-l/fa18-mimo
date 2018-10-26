@@ -58,7 +58,7 @@ abstract class WriteQueue
     queue2.io.deq.ready := (out.ready && !(queue0.io.deq.valid || queue1.io.deq.valid || queue3.io.deq.valid))
     queue3.io.deq.ready := (out.ready && !(queue0.io.deq.valid || queue1.io.deq.valid || queue2.io.deq.valid))
     // We need to make the enq a UInt to satisfy regmap, and Decoupled to break out ready, valid, bits.
-    val enq0 = Wire(Decoupled(UInt(24.W)))
+    val enq0 = Wire(Decoupled(UInt(24.W))) // Is this width just for the bits? Or need to increase width for ready, valid?
     queue0.io.enq.valid := enq0.valid
     queue0.io.enq.bits := enq0.bits.asTypeOf(DspComplex(FixedPoint(12.W, 7.BP), FixedPoint(12.W, 7.BP)))
     enq0.ready := queue0.io.enq.ready
