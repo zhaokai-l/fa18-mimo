@@ -121,11 +121,10 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   // COMBINATORIAL CALCULATION
 
   // scale down by # of antennas & oversampling ratio so that matrix mult sum = 1
-  // TODO: this isn't type generic. Somehow can't get it to convert to params.proto.
-  val scale = DspComplex(ConvertableTo[T].fromDouble(1.0/(params.M*params.O)), ConvertableTo[T].fromDouble(0))
-  //val scale = params.proto(Complex(1.0/params.M, 0))
+  // TODO: this isn't type generic. Somehow can't get it to convert to params.proto to work with DspReal.
+  val scale = DspComplex[T](Complex(1.0/(params.M*params.O), 0))
   // channel estimate = conjugate (subcarrier response * pilot) / scale
-  val h = (sReg zip pReg(kCnt)).map{ case (a, b) => Mux(b, a, -a) }
+  val h = (sReg zip pReg(kCnt)).map{ case (s, p) => Mux(p, s, -s) }
   val hH = h.map{_.conj()*scale}
 
   // STATE MACHINE
@@ -143,7 +142,7 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   io.extWt.ready := state === sHold
   // Output valid
   // TODO: Why does this complain?
-  io.out.zipWithIndex.map{case(a,b) => a.valid := outValidReg(b)}
+  io.out.zipWithIndex.map{case(o,i) => o.valid := outValidReg(i)}
 
   // Load known pilots
   when(io.pilots.fire()) { pReg := io.pilots.bits }
@@ -162,7 +161,7 @@ class FFTFSM[T <: Data : Real](val params: FFTFSMParams[T]) extends Module {
   }
 
   // Set weights for user kCnt
-  (io.out zip wMem).foreach{case(a,b) => a.bits := b}
+  (io.out zip wMem).foreach{case(o,w) => o.bits := w}
 
   // this user now valid, increment, move onto payload when finished
   when(state === sDone) {
