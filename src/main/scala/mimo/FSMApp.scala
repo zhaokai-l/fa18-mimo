@@ -18,7 +18,7 @@ object Int {
 
 
 /**
- * Define entry point for FSM generator
+ * Define entry point for FFT FSM generator
  */
 object FFTFSMApp extends App {
   val usage = s"""FSM arguments:
@@ -66,4 +66,49 @@ object FFTFSMApp extends App {
   val (chiselArgs, params) = argParse(args.toList, defaultParams)
   // Run the Chisel driver to generate a FSM
   Driver.execute(chiselArgs.toArray, () => new FFTFSM(params))
+}
+
+/**
+  * Define entry point for Golay FSM generator
+  */
+object GolayFSMApp extends App {
+  val usage = s"""FSM arguments:
+                 |--w <Int>\t\tWidth of all IO
+                 |--c <Int>\t\tNumber of correlation samples
+                 |--k <Int>\t\tNumber of UEs
+                 |--o <Int>\t\tOversampling ratio
+                 |""".stripMargin
+  /**
+    * Parse arguments
+    *
+    * Some arguments are used by the GolayFSM generator and are used to construct a FixedGolayFSMParams object.
+    * The rest get returned as a List[String] to pass to the Chisel driver
+    *
+    */
+  def argParse(args: List[String], params: FixedGolayFSMParams): (List[String], FixedGolayFSMParams) = {
+    args match {
+      case "--help" :: tail =>
+        println(usage)
+        val (newArgs, newParams) = argParse(tail, params)
+        ("--help" +: newArgs, newParams)
+      case "--w" :: Int(w) :: tail => argParse(tail, params.copy(IOWidth = w))
+      case "--c" :: Int(c) :: tail => argParse(tail, params.copy(C = c))
+      case "--k" :: Int(k) :: tail => argParse(tail, params.copy(K = k))
+      case "--o" :: Int(o) :: tail => argParse(tail, params.copy(O = o))
+      case chiselOpt :: tail => {
+        val (newArgs, newParams) = argParse(tail, params)
+        (chiselOpt +: newArgs, newParams)
+      }
+      case Nil => (args, params)
+    }
+  }
+  val defaultParams = FixedGolayFSMParams(
+    IOWidth = 16,
+    C = 1,
+    K = 2,
+    O = 1,
+  )
+  val (chiselArgs, params) = argParse(args.toList, defaultParams)
+  // Run the Chisel driver to generate a FSM
+  Driver.execute(chiselArgs.toArray, () => new GolayFSM(params))
 }

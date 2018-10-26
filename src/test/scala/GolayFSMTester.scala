@@ -32,19 +32,17 @@ class GolayFSMTester[T <: chisel3.Data](c: GolayFSM[T], samples: Seq[CPW], tolLS
   // TODO: external weight setting
   poke(c.io.extWt.valid, 0)
   poke(c.io.extWt.bits.kAddr, 0)
-  poke(c.io.extWt.bits.cAddr, 0)
   poke(c.io.extWt.bits.wt, Complex(0, 0))
 
   // output ready for each user
   c.io.out.foreach{ k => poke(k.ready, 1) }
 
-  var i = 0
-
   // Iterate through all samples
   for ((samp, i) <- samples.zipWithIndex) {
     // load correlations
     poke(c.io.in.valid, samp.peakValid)
-    poke(c.io.in.bits, samp.correlation)
+    // TODO: this is only valid for single correlation samples (params.C=1)
+    poke(c.io.in.bits(0), samp.correlation)
 
     // wait until input is accepted
     var cyclesWaiting = 0
@@ -57,8 +55,9 @@ class GolayFSMTester[T <: chisel3.Data](c: GolayFSM[T], samples: Seq[CPW], tolLS
     }
     // wait until output is valid
     cyclesWaiting = 0
-    // only wait for output valid in estimation phase
-    if (i < c.params.K) {
+    // only wait for output valid after we pushed in a peak
+    // TODO: this won't work for streaming data
+    if (samp.peakValid) {
       while (!peek(c.io.out(i).valid) && cyclesWaiting < maxCyclesWait) {
         cyclesWaiting += 1
         if (cyclesWaiting >= maxCyclesWait) {
@@ -77,7 +76,7 @@ class GolayFSMTester[T <: chisel3.Data](c: GolayFSM[T], samples: Seq[CPW], tolLS
     fixTolLSBs.withValue(tolLSBs) {
       // check every output where we have an expected value
       // TODO: Support case where we want to see that the weights didn't change during payload
-      frame.weight.foreach {
+      samp.weight.foreach {
         w => expect(c.io.out(i).bits, w)
       }
     }

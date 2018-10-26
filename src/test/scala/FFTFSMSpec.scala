@@ -57,7 +57,7 @@ class FFTFSMSpec extends FlatSpec with Matchers {
     // pilots & golden weights
     for (k <- 0 until params.K) {
       antPilots(m)(k) = antFFTs(m)(k).splitAt(params.S).zipped.map{case(r,i) => Complex(r,i)}
-      h(m)(k) = (txPilots(k) zip antPilots(m)(k)).map{case (a,b) => if(a) {b} else {-b}}
+      h(m)(k) = (txPilots(k) zip antPilots(m)(k)).map{case (t,a) => if(t) {a} else {-a}}
       hH(m)(k) = h(m)(k).map{_.conjugate/(params.M*params.O)}
     }
     // payloads

@@ -21,40 +21,38 @@ class GolayFSMSpec extends FlatSpec with Matchers {
   val params = FixedGolayFSMParams(
     IOWidth = 16,
     //make sure these match the test files
-    N = 80,
     C = 1,
     K = 2,
-    M = 4,
     O = 1
   )
 
   // load correlated pilots and where the valid is asserted (peak) from test files
+  val M = 4 // # of antennas
   val rsrc = "src/test/resources/"
-  val antCorrsRaw = Array.ofDim[List[Double]](params.M)
-  val peakValids = Array.ofDim[List[Boolean]](params.K)
-  for (m <- 0 until params.M) {
+  val antCorrsRaw = Array.ofDim[List[Double]](M)
+  val peakValids = Array.ofDim[List[Boolean]](M)
+  for (m <- 0 until M) {
     antCorrsRaw(m) = io.Source.fromFile(rsrc+"Antenna_"+m+"_Golay_Result.csv").getLines.toList.map{_.toDouble}
     peakValids(m) = io.Source.fromFile(rsrc+"Antenna_"+m+"_Peak_Valid.csv").getLines.toList.map{_ == "TRUE"}
   }
 
-  // repackage into array of complex numbers & calculate golden channel estimation
-  val nSamps = peakValids(0).length/2
-  val antCorrs, hH = Array.ofDim[List[Complex]](params.M)
-  for (m <- 0 until params.M) {
-    antCorrs(m) = antCorrsRaw(m).splitAt(nSamps).zipped.map{case(a,b) => Complex(a,b)}
-    hH(m) = (peakValids(m) zip antCorrs(m)).collect{case(a,b) if a => b.conjugate}
+  // repackage into array of complex numbers & calculate golden Hermitian conjugates
+  val nSamps = peakValids(0).length
+  val antCorrs, hH = Array.ofDim[List[Complex]](M)
+  for (m <- 0 until M) {
+    antCorrs(m) = antCorrsRaw(m).splitAt(nSamps).zipped.map{case(r,i) => Complex(r,i)}
+    hH(m) = antCorrs(m).map{_.conjugate}
   }
 
   // make baseCPW sample
   val baseSample = CPW(correlation = Complex(0,0), peakValid = false)
-  val samples = Array.ofDim[CPW](params.M*nSamps)
+  val samples = Array.ofDim[CPW](M*nSamps)
 
   // append all antennas together
-  for (m <- 0 until params.M) {
-    var k = 0 //which user's golden pilot
+  for (m <- 0 until M) {
     for(s <- 0 until nSamps) {
-      val goldenWeight = if(peakValids(m)(s)) Some(hH(m)(k+=1))  else None
-      samples(params.M*nSamps+s) = baseSample.copy(correlation = antCorrs(m)(s), peakValid = peakValids(m)(s), weight = goldenWeight)
+      val goldenWeight = if(peakValids(m)(s)) Some(hH(m)(s)) else None
+      samples(m*nSamps+s) = baseSample.copy(correlation = antCorrs(m)(s), peakValid = peakValids(m)(s), weight = goldenWeight)
     }
   }
 
@@ -64,16 +62,13 @@ class GolayFSMSpec extends FlatSpec with Matchers {
 
   val realParams = new GolayFSMParams[DspReal] {
     val proto = DspComplex(DspReal())
-    val N = params.N
     val C = params.C
     val K = params.K
-    val M = params.M
     val O = params.O
   }
 
   // can reuse all the stimulus from above
-  // TODO: Real test does not work
   it should "DspReal channel estimate" in {
-    //RealGolayFSMTester(realParams, samples) should be (true)
+    RealGolayFSMTester(realParams, samples) should be (true)
   }
 }
